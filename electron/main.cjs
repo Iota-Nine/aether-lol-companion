@@ -117,6 +117,13 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url.startsWith('mailto:')) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
+  })
+
   const target = isDev ? DEV_URL : PROD_URL
   mainWindow.loadURL(target)
 
