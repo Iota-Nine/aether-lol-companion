@@ -11,6 +11,14 @@ export interface InGameItem {
   price: number
 }
 
+export interface GameEvent {
+  id: number
+  name: string
+  time: number
+  label: string
+  kind: 'kill' | 'objective' | 'ace' | 'structure' | 'system' | 'other'
+}
+
 export interface InGamePlayerLive {
   cellId: number
   team: TeamSide
@@ -42,13 +50,8 @@ export interface InGamePlayerLive {
   keystone: string | null
   spell1: string | null
   spell2: string | null
-}
-
-export interface GameEvent {
-  id: number
-  name: string
-  time: number
-  label: string
+  spell1Key: string | null
+  spell2Key: string | null
 }
 
 export interface InGameState {
@@ -93,8 +96,8 @@ interface RawLivePlayer {
   }>
   runes?: { keystone?: { displayName?: string } }
   summonerSpells?: {
-    summonerSpellOne?: { displayName?: string }
-    summonerSpellTwo?: { displayName?: string }
+    summonerSpellOne?: { displayName?: string; rawDisplayName?: string }
+    summonerSpellTwo?: { displayName?: string; rawDisplayName?: string }
   }
 }
 
@@ -159,6 +162,69 @@ function parseRiot(p: RawLivePlayer) {
   return { gameName: name, tagLine: '???', riotId: name }
 }
 
+function resolveSpellKey(spell?: { displayName?: string; rawDisplayName?: string } | null): string | null {
+  if (!spell) return null
+  const raw = spell.rawDisplayName || ''
+  const fromRaw = raw.match(/SummonerSpell_(Summoner[A-Za-z0-9]+)_/i)
+  if (fromRaw?.[1]) return fromRaw[1]
+  const n = (spell.displayName || '').trim().toLowerCase()
+  const map: Record<string, string> = {
+    flash: 'SummonerFlash',
+    éclair: 'SummonerFlash',
+    eclair: 'SummonerFlash',
+    ignite: 'SummonerDot',
+    brûlure: 'SummonerDot',
+    brulure: 'SummonerDot',
+    teleport: 'SummonerTeleport',
+    téléportation: 'SummonerTeleport',
+    teleportation: 'SummonerTeleport',
+    heal: 'SummonerHeal',
+    soin: 'SummonerHeal',
+    barrier: 'SummonerBarrier',
+    barrière: 'SummonerBarrier',
+    barriere: 'SummonerBarrier',
+    exhaust: 'SummonerExhaust',
+    épuisement: 'SummonerExhaust',
+    epuisement: 'SummonerExhaust',
+    ghost: 'SummonerHaste',
+    fantôme: 'SummonerHaste',
+    fantome: 'SummonerHaste',
+    smite: 'SummonerSmite',
+    châtiment: 'SummonerSmite',
+    chatiment: 'SummonerSmite',
+    cleanse: 'SummonerBoost',
+    purification: 'SummonerBoost',
+    clarity: 'SummonerMana',
+    clarté: 'SummonerMana',
+    clarte: 'SummonerMana',
+    mark: 'SummonerSnowball',
+    marque: 'SummonerSnowball',
+  }
+  return map[n] ?? null
+}
+
+function eventKind(name?: string): GameEvent['kind'] {
+  switch (name) {
+    case 'ChampionKill':
+    case 'FirstBlood':
+      return 'kill'
+    case 'DragonKill':
+    case 'BaronKill':
+    case 'HeraldKill':
+      return 'objective'
+    case 'TurretKilled':
+    case 'InhibKilled':
+      return 'structure'
+    case 'Ace':
+      return 'ace'
+    case 'GameStart':
+    case 'MinionsSpawning':
+      return 'system'
+    default:
+      return 'other'
+  }
+}
+
 function eventLabel(ev: {
   EventName?: string
   KillerName?: string
@@ -167,25 +233,25 @@ function eventLabel(ev: {
 }): string {
   switch (ev.EventName) {
     case 'ChampionKill':
-      return `${ev.KillerName ?? '?'} a tué ${ev.VictimName ?? '?'}`
+      return `${ev.KillerName ?? '?'} ✕ ${ev.VictimName ?? '?'}`
     case 'DragonKill':
-      return `Dragon ${ev.DragonType ?? ''} tué par ${ev.KillerName ?? '?'}`
+      return `DRAGON ${ev.DragonType ?? ''} · ${ev.KillerName ?? '?'}`
     case 'BaronKill':
-      return `Baron tué par ${ev.KillerName ?? '?'}`
+      return `BARON · ${ev.KillerName ?? '?'}`
     case 'HeraldKill':
-      return `Héraut tué par ${ev.KillerName ?? '?'}`
+      return `HÉRAUT · ${ev.KillerName ?? '?'}`
     case 'TurretKilled':
-      return `Tourelle détruite (${ev.KillerName ?? 'équipe'})`
+      return `TOUR · ${ev.KillerName ?? 'équipe'}`
     case 'InhibKilled':
-      return `Inhibiteur détruit`
+      return `INHIB · détruit`
     case 'Ace':
-      return `ACE !`
+      return `ACE`
     case 'FirstBlood':
-      return `First Blood — ${ev.KillerName ?? ''}`
+      return `FIRST BLOOD · ${ev.KillerName ?? ''}`
     case 'GameStart':
-      return 'Début de partie'
+      return `START`
     case 'MinionsSpawning':
-      return 'Sbires spawn'
+      return `SBIRES`
     default:
       return ev.EventName ?? 'Event'
   }
@@ -313,6 +379,8 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       keystone: sanitizeKeystone(keystoneRaw),
       spell1: p.summonerSpells?.summonerSpellOne?.displayName ?? null,
       spell2: p.summonerSpells?.summonerSpellTwo?.displayName ?? null,
+      spell1Key: resolveSpellKey(p.summonerSpells?.summonerSpellOne),
+      spell2Key: resolveSpellKey(p.summonerSpells?.summonerSpellTwo),
     })
   }
 
@@ -349,6 +417,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       name: ev.EventName || '',
       time: Math.floor(ev.EventTime || 0),
       label: eventLabel(ev as { EventName?: string; KillerName?: string; VictimName?: string; DragonType?: string; Recipient?: string }),
+      kind: eventKind(ev.EventName),
     }))
 
   return {
@@ -431,6 +500,8 @@ async function fetchInGameStateFromPlayers(
       keystone: sanitizeKeystone(p.runes?.keystone?.displayName),
       spell1: p.summonerSpells?.summonerSpellOne?.displayName ?? null,
       spell2: p.summonerSpells?.summonerSpellTwo?.displayName ?? null,
+      spell1Key: resolveSpellKey(p.summonerSpells?.summonerSpellOne),
+      spell2Key: resolveSpellKey(p.summonerSpells?.summonerSpellTwo),
     })
   }
   for (const p of mapped) p.combatScore = combatScore(p)
@@ -517,6 +588,8 @@ export async function buildLolInGameSession(params: {
         keystone: p.keystone,
         spell1: p.spell1,
         spell2: p.spell2,
+        spell1Key: p.spell1Key,
+        spell2Key: p.spell2Key,
         items: p.items,
       },
       links: buildProfileLinks(p.gameName, p.tagLine, region, 'lol'),
@@ -713,6 +786,8 @@ export async function buildLolFromGameflow(params: {
           keystone: live.keystone,
           spell1: live.spell1,
           spell2: live.spell2,
+          spell1Key: live.spell1Key,
+          spell2Key: live.spell2Key,
           items: live.items,
         },
       }

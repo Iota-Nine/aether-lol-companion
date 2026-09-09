@@ -1,35 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchProfile, fetchMatchDebrief, fetchLatestDebrief } from './api'
 import type { ProfileHome, MatchDebrief, MatchSummary } from './types'
-
-const DDRAGON = '15.6.1'
-
-const SPELL_ICONS: Record<number, string> = {
-  1: 'SummonerBoost',
-  3: 'SummonerExhaust',
-  4: 'SummonerFlash',
-  6: 'SummonerHaste',
-  7: 'SummonerHeal',
-  11: 'SummonerSmite',
-  12: 'SummonerTeleport',
-  13: 'SummonerMana',
-  14: 'SummonerDot',
-  21: 'SummonerBarrier',
-  32: 'SummonerSnowball',
-  39: 'SummonerSnowURFSnowball_Mark',
-  54: 'Summoner_UltBookPlaceholder',
-  55: 'Summoner_UltBookSmitePlaceholder',
-}
+import { itemIconUrl, resolveSpellIcon } from './ddragon'
 
 function itemIcon(id: number): string {
-  return `https://ddragon.leagueoflegends.com/cdn/${DDRAGON}/img/item/${id}.png`
+  return itemIconUrl(id)
 }
 
 function spellIcon(id: number | null): string | null {
-  if (id == null) return null
-  const key = SPELL_ICONS[id]
-  if (!key) return null
-  return `https://ddragon.leagueoflegends.com/cdn/${DDRAGON}/img/spell/${key}.png`
+  return resolveSpellIcon({ id })
 }
 
 function formatDuration(sec: number): string {

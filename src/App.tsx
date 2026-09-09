@@ -3,6 +3,7 @@ import { fetchLive, fetchLaneMeta } from './api'
 import type { LiveSession, LolBuildGuide, MetaGuides, PlayerCard, TftCompGuide } from './types'
 import type { UpdateState } from './desktop'
 import { HomeBoard } from './HomeBoard'
+import { itemIconUrl, resolveSpellIcon } from './ddragon'
 import './App.css'
 
 function wrTone(wr: number | null): 'good' | 'mid' | 'bad' | 'neutral' {
@@ -40,7 +41,48 @@ function formatGameClock(seconds: number): string {
 }
 
 function itemIcon(id: number): string {
-  return `https://ddragon.leagueoflegends.com/cdn/15.6.1/img/item/${id}.png`
+  return itemIconUrl(id)
+}
+
+function LiveItemRow({ items }: { items: { itemID: number; displayName: string }[] }) {
+  const slots = Array.from({ length: 7 }, (_, i) => items[i] ?? null)
+  return (
+    <div className="item-row live-items">
+      {slots.map((it, i) =>
+        it ? (
+          <img key={`${it.itemID}-${i}`} src={itemIcon(it.itemID)} alt="" title={it.displayName} />
+        ) : (
+          <span key={`empty-${i}`} className="item-empty" />
+        ),
+      )}
+    </div>
+  )
+}
+
+function LiveSpellIcons({
+  spell1,
+  spell2,
+  spell1Key,
+  spell2Key,
+  spell1Id,
+  spell2Id,
+}: {
+  spell1?: string | null
+  spell2?: string | null
+  spell1Key?: string | null
+  spell2Key?: string | null
+  spell1Id?: number | null
+  spell2Id?: number | null
+}) {
+  const a = resolveSpellIcon({ key: spell1Key, name: spell1, id: spell1Id })
+  const b = resolveSpellIcon({ key: spell2Key, name: spell2, id: spell2Id })
+  if (!a && !b) return null
+  return (
+    <div className="live-spells">
+      {a ? <img src={a} alt={spell1 || ''} title={spell1 || ''} /> : <span className="spell-empty" />}
+      {b ? <img src={b} alt={spell2 || ''} title={spell2 || ''} /> : <span className="spell-empty" />}
+    </div>
+  )
 }
 
 function PlayerSlot({
@@ -88,6 +130,14 @@ function PlayerSlot({
           )}
           {live && <span className="lvl-badge">LVL {live.level}</span>}
         </div>
+        <LiveSpellIcons
+          spell1={live?.spell1}
+          spell2={live?.spell2}
+          spell1Key={live?.spell1Key}
+          spell2Key={live?.spell2Key}
+          spell1Id={player.spell1Id}
+          spell2Id={player.spell2Id}
+        />
         <div className={`slot-flag flag-${status}`}>
           {live
             ? live.isDead
@@ -145,8 +195,12 @@ function PlayerSlot({
               <span>KDA {live.kdaRatio}</span>
             </div>
             <div className="live-metrics">
-              <span>CS {live.cs}</span>
-              <span>OR ~{live.goldEstimate}</span>
+              <span key={`cs-${live.cs}`} className="tick-num">
+                CS {live.cs}
+              </span>
+              <span key={`g-${live.goldEstimate}`} className="tick-num">
+                OR {live.goldEstimate.toLocaleString('fr-FR')}
+              </span>
               <span>WARD {live.wardScore}</span>
             </div>
             <div className="dmg-row">
@@ -161,25 +215,8 @@ function PlayerSlot({
                 />
               </div>
             </div>
-            {live.items.length > 0 && (
-              <div className="item-row">
-                {live.items.slice(0, 7).map((it) => (
-                  <img
-                    key={`${it.itemID}-${it.displayName}`}
-                    src={itemIcon(it.itemID)}
-                    alt={it.displayName}
-                    title={it.displayName}
-                  />
-                ))}
-              </div>
-            )}
-            {(live.spell1 || live.keystone) && (
-              <div className="live-extras">
-                {live.spell1 && <span>{live.spell1}</span>}
-                {live.spell2 && <span>{live.spell2}</span>}
-                {live.keystone && <span>{live.keystone}</span>}
-              </div>
-            )}
+            <LiveItemRow items={live.items} />
+            {live.keystone && <div className="live-keystone">{live.keystone}</div>}
           </div>
         )}
 
@@ -340,6 +377,8 @@ function InGameBoard({ live }: { live: LiveSession }) {
   const e = ig.teamTotals.enemy
   const goldDiff = a.gold - e.gold
   const combatPct = (a.combat / (a.combat + e.combat || 1)) * 100
+  const roster = [...live.allies, ...live.enemies]
+  const killFeed = ig.events.filter((ev) => (ev.kind || 'other') !== 'system').slice(0, 10)
 
   return (
     <section className="ingame-board">
@@ -347,7 +386,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
       <div className="ingame-top">
         <div className="ingame-stream">
           <i className="stream-dot" />
-          <span>DIRECT · LIVE CLIENT 2999</span>
+          <span>DIRECT · 0.6s</span>
         </div>
         <div className="ingame-clock">
           <span>MATCH CLOCK</span>
@@ -365,14 +404,14 @@ function InGameBoard({ live }: { live: LiveSession }) {
           <strong key={`a-${a.kills}-${a.deaths}-${a.assists}`} className="tick-num">
             {a.kills} / {a.deaths} / {a.assists}
           </strong>
-          <small>
+          <small key={`acs-${a.cs}-${a.gold}`} className="tick-num">
             CS {a.cs} · OR {a.gold.toLocaleString('fr-FR')}
           </small>
         </div>
         <div className="score-mid">
           <div className={`gold-diff ${goldDiff >= 0 ? 'up' : 'down'}`}>
             <span>GOLD EDGE</span>
-            <strong>
+            <strong key={goldDiff} className="tick-num">
               {goldDiff >= 0 ? '+' : ''}
               {goldDiff.toLocaleString('fr-FR')}
             </strong>
@@ -382,7 +421,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
               <i style={{ width: `${combatPct}%` }} />
               <b style={{ left: `${combatPct}%` }} />
             </div>
-            <span>COMBAT POWER · {combatPct.toFixed(0)}% ALLY</span>
+            <span>COMBAT · {combatPct.toFixed(0)}% ALLY</span>
           </div>
         </div>
         <div className="score-side enemy">
@@ -390,30 +429,52 @@ function InGameBoard({ live }: { live: LiveSession }) {
           <strong key={`e-${e.kills}-${e.deaths}-${e.assists}`} className="tick-num">
             {e.kills} / {e.deaths} / {e.assists}
           </strong>
-          <small>
+          <small key={`ecs-${e.cs}-${e.gold}`} className="tick-num">
             CS {e.cs} · OR {e.gold.toLocaleString('fr-FR')}
           </small>
         </div>
       </div>
 
-      {ig.events.length > 0 && (
+      {roster.length > 0 && (
+        <div className="ingame-roster">
+          <div className="roster-side ally">
+            {live.allies.map((p) => (
+              <div key={`ra-${p.cellId}`} className={`roster-chip ${p.live?.isDead ? 'dead' : ''}`}>
+                {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
+                <em key={`${p.live?.kills}-${p.live?.deaths}-${p.live?.assists}`} className="tick-num">
+                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '—'}
+                </em>
+              </div>
+            ))}
+          </div>
+          <div className="roster-side enemy">
+            {live.enemies.map((p) => (
+              <div key={`re-${p.cellId}`} className={`roster-chip ${p.live?.isDead ? 'dead' : ''}`}>
+                {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
+                <em key={`${p.live?.kills}-${p.live?.deaths}-${p.live?.assists}`} className="tick-num">
+                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '—'}
+                </em>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {killFeed.length > 0 && (
         <div className="event-feed">
-          {ig.events.slice(0, 8).map((ev, i) => (
+          {killFeed.map((ev, i) => (
             <div
               key={`${ev.id}-${ev.time}-${i}`}
-              className="event-row"
+              className={`event-row kind-${ev.kind || 'other'}`}
               style={{ animationDelay: `${i * 40}ms` }}
             >
               <time>{formatGameClock(ev.time)}</time>
+              <i className="event-kind" />
               <span>{ev.label}</span>
             </div>
           ))}
         </div>
       )}
-
-      <p className="ingame-note">
-        Flux temps réel · part combat = proxy KDA/CS/or (API Riot live = pas de DMG bruts)
-      </p>
     </section>
   )
 }
@@ -658,7 +719,7 @@ export default function App() {
 
   useEffect(() => {
     void refresh()
-    const ms = live?.inGame?.active ? 800 : 1500
+    const ms = live?.inGame?.active ? 600 : 1500
     const id = window.setInterval(() => void refresh(), ms)
     return () => window.clearInterval(id)
   }, [refresh, live?.inGame?.active])
@@ -896,7 +957,7 @@ export default function App() {
         <div className="command-actions">
           <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''} ${showHome ? 'home' : ''}`}>
             <i className="live-dot" />
-            {isInGame ? 'STREAM 0.8s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
+            {isInGame ? 'STREAM 0.6s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
             <em>#{tick}</em>
           </div>
           <button type="button" className="icon-btn" onClick={() => void refresh()} title="Rafraîchir">
@@ -906,8 +967,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Barre lanes permanente — disponible sans League */}
-      {showLolLanes && <LanePicker lane={metaLane} onChange={setMetaLane} sticky />}
+      {/* Barre lanes — masquée en live pour laisser place au scoreboard */}
+      {showLolLanes && !isInGame && <LanePicker lane={metaLane} onChange={setMetaLane} sticky />}
 
       <section className="status-strip">
         <div className="status-message">
@@ -1072,8 +1133,8 @@ export default function App() {
         </>
       )}
 
-      {/* Meta OP.GG : principale hors compte, secondaire si profil connecté */}
-      {showLolLanes && (
+      {/* Meta OP.GG hors in-game (secondaire si profil) */}
+      {showLolLanes && !isInGame && (
         <LolBuildsPanel
           lane={metaLane}
           onLaneChange={setMetaLane}
@@ -1088,8 +1149,8 @@ export default function App() {
       )}
 
       <footer className="hud-footer">
-        <span>AETHER HUD v1.5 · HOME + DEBRIEF</span>
-        <span>Profil LCU · historique · meta OP.GG</span>
+        <span>AETHER HUD v1.6 · LIVE SCOREBOARD</span>
+        <span>Profil · historique · debrief · live 0.6s</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>

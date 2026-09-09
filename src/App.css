@@ -2204,10 +2204,124 @@
   z-index: 2;
 }
 
+.item-empty {
+  width: 24px;
+  height: 24px;
+  border: 1px dashed rgba(148, 163, 184, 0.22);
+  background: rgba(8, 12, 20, 0.55);
+  display: inline-block;
+}
+
+.live-items img,
+.live-items .item-empty {
+  width: 26px;
+  height: 26px;
+}
+
+.live-spells {
+  display: flex;
+  gap: 3px;
+  justify-content: center;
+  margin: 4px 0 2px;
+}
+
+.live-spells img,
+.live-spells .spell-empty {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  display: block;
+  background: #0b1220;
+}
+
+.live-keystone {
+  font-family: var(--font-hud);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  color: #99f6e4;
+  opacity: 0.85;
+}
+
 .live-extras {
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
+}
+
+.ingame-roster {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0 10px;
+}
+
+.roster-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.roster-side.enemy {
+  justify-content: flex-end;
+}
+
+.roster-chip {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 44px;
+}
+
+.roster-chip img {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 2px solid rgba(45, 212, 191, 0.35);
+}
+
+.roster-side.enemy .roster-chip img {
+  border-color: rgba(251, 113, 133, 0.4);
+}
+
+.roster-chip.dead {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+}
+
+.roster-chip em {
+  font-style: normal;
+  font-family: var(--font-hud);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.event-row.kind-kill {
+  border-left: 2px solid #fb7185;
+}
+
+.event-row.kind-objective {
+  border-left: 2px solid #fbbf24;
+}
+
+.event-row.kind-ace {
+  border-left: 2px solid #2dd4bf;
+  color: #99f6e4;
+}
+
+.event-row.kind-structure {
+  border-left: 2px solid #94a3b8;
+}
+
+.event-row .event-kind {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.55;
+  flex-shrink: 0;
 }
 
 .ingame-board {

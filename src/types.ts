@@ -45,6 +45,8 @@ export interface PlayerLiveStats {
   keystone: string | null
   spell1: string | null
   spell2: string | null
+  spell1Key?: string | null
+  spell2Key?: string | null
   items: { itemID: number; displayName: string; count: number; price: number }[]
 }
 
@@ -67,7 +69,13 @@ export interface InGameSnapshot {
   gameMode: string
   gameTime: number
   mapName: string
-  events: { id: number; name: string; time: number; label: string }[]
+  events: {
+    id: number
+    name: string
+    time: number
+    label: string
+    kind?: 'kill' | 'objective' | 'ace' | 'structure' | 'system' | 'other'
+  }[]
   teamTotals: {
     ally: { kills: number; deaths: number; assists: number; cs: number; combat: number; gold: number }
     enemy: { kills: number; deaths: number; assists: number; cs: number; combat: number; gold: number }
