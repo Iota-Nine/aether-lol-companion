@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, shell, screen, globalShortcut } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
@@ -11,7 +11,9 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://127.0.0.1:5173'
 const PROD_URL = `http://127.0.0.1:${API_PORT}`
 
 let mainWindow = null
+let overlayWindow = null
 let apiProcess = null
+let overlayClickThrough = false
 
 function waitForUrl(url, timeoutMs = 90000) {
   const start = Date.now()
@@ -83,6 +85,116 @@ function startApiServer() {
   })
 }
 
+function baseUiUrl() {
+  return isDev ? DEV_URL : PROD_URL
+}
+
+function applyOverlayClickThrough(enabled) {
+  overlayClickThrough = Boolean(enabled)
+  if (!overlayWindow || overlayWindow.isDestroyed()) return overlayClickThrough
+  if (overlayClickThrough) {
+    overlayWindow.setIgnoreMouseEvents(true, { forward: true })
+  } else {
+    overlayWindow.setIgnoreMouseEvents(false)
+  }
+  return overlayClickThrough
+}
+
+function positionOverlay(win) {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const { workArea } = display
+  const [ww, wh] = win.getSize()
+  const x = Math.round(workArea.x + workArea.width - ww - 24)
+  const y = Math.round(workArea.y + 48)
+  win.setPosition(x, y)
+}
+
+function createOverlayWindow() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.show()
+    overlayWindow.focus()
+    return overlayWindow
+  }
+
+  overlayWindow = new BrowserWindow({
+    width: 460,
+    height: 340,
+    minWidth: 360,
+    minHeight: 180,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    hasShadow: false,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    autoHideMenuBar: true,
+    title: 'AETHER Overlay',
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  positionOverlay(overlayWindow)
+
+  const url = `${baseUiUrl()}?view=overlay`
+  overlayWindow.loadURL(url)
+
+  overlayWindow.once('ready-to-show', () => {
+    overlayWindow?.showInactive()
+    applyOverlayClickThrough(overlayClickThrough)
+  })
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('overlay:state', { open: false, clickThrough: overlayClickThrough })
+    }
+  })
+
+  return overlayWindow
+}
+
+function setOverlayOpen(open) {
+  if (open) {
+    createOverlayWindow()
+  } else if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide()
+  }
+  const isOpen = Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible())
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('overlay:state', { open: isOpen, clickThrough: overlayClickThrough })
+  }
+  return { open: isOpen, clickThrough: overlayClickThrough }
+}
+
+function toggleOverlay() {
+  const isOpen = Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible())
+  if (isOpen) {
+    overlayWindow.hide()
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('overlay:state', { open: false, clickThrough: overlayClickThrough })
+    }
+    return { open: false, clickThrough: overlayClickThrough }
+  }
+  createOverlayWindow()
+  if (overlayWindow && !overlayWindow.isDestroyed() && !overlayWindow.isVisible()) {
+    overlayWindow.showInactive()
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('overlay:state', { open: true, clickThrough: overlayClickThrough })
+  }
+  return { open: true, clickThrough: overlayClickThrough }
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1360,
@@ -124,11 +236,14 @@ function createWindow() {
     }
   })
 
-  const target = isDev ? DEV_URL : PROD_URL
-  mainWindow.loadURL(target)
+  mainWindow.loadURL(baseUiUrl())
 
   mainWindow.on('closed', () => {
     mainWindow = null
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.close()
+      overlayWindow = null
+    }
   })
 }
 
@@ -152,6 +267,49 @@ ipcMain.handle('window:close', () => {
 
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
+ipcMain.handle('overlay:toggle', () => toggleOverlay())
+ipcMain.handle('overlay:show', () => setOverlayOpen(true))
+ipcMain.handle('overlay:hide', () => setOverlayOpen(false))
+ipcMain.handle('overlay:getState', () => ({
+  open: Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()),
+  clickThrough: overlayClickThrough,
+}))
+ipcMain.handle('overlay:setClickThrough', (_event, enabled) => {
+  const value = applyOverlayClickThrough(Boolean(enabled))
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('overlay:state', {
+      open: Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()),
+      clickThrough: value,
+    })
+  }
+  return value
+})
+
+function registerShortcuts() {
+  try {
+    globalShortcut.register('CommandOrControl+Shift+O', () => {
+      toggleOverlay()
+    })
+    globalShortcut.register('CommandOrControl+Shift+P', () => {
+      applyOverlayClickThrough(!overlayClickThrough)
+      if (overlayWindow && !overlayWindow.isDestroyed()) {
+        overlayWindow.webContents.send('overlay:state', {
+          open: overlayWindow.isVisible(),
+          clickThrough: overlayClickThrough,
+        })
+      }
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('overlay:state', {
+          open: Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()),
+          clickThrough: overlayClickThrough,
+        })
+      }
+    })
+  } catch (error) {
+    console.warn('[aether] Raccourcis overlay indisponibles:', error)
+  }
+}
+
 app.whenReady().then(async () => {
   try {
     if (isDev) {
@@ -162,6 +320,7 @@ app.whenReady().then(async () => {
       await waitForUrl(`http://127.0.0.1:${API_PORT}/api/health`)
     }
     createWindow()
+    registerShortcuts()
   } catch (error) {
     console.error(error)
     app.quit()
@@ -170,6 +329,10 @@ app.whenReady().then(async () => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
 })
 
 app.on('window-all-closed', () => {
@@ -181,6 +344,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll()
   if (apiProcess) {
     apiProcess.kill()
     apiProcess = null

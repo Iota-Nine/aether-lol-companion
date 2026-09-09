@@ -14,4 +14,14 @@ contextBridge.exposeInMainWorld('aetherDesktop', {
     ipcRenderer.on('update:state', handler)
     return () => ipcRenderer.removeListener('update:state', handler)
   },
+  overlayToggle: () => ipcRenderer.invoke('overlay:toggle'),
+  overlayShow: () => ipcRenderer.invoke('overlay:show'),
+  overlayHide: () => ipcRenderer.invoke('overlay:hide'),
+  overlayGetState: () => ipcRenderer.invoke('overlay:getState'),
+  overlaySetClickThrough: (enabled) => ipcRenderer.invoke('overlay:setClickThrough', enabled),
+  onOverlayState: (callback) => {
+    const handler = (_event, state) => callback(state)
+    ipcRenderer.on('overlay:state', handler)
+    return () => ipcRenderer.removeListener('overlay:state', handler)
+  },
 })

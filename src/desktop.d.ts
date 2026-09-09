@@ -9,6 +9,11 @@ export type UpdateState = {
   installInSeconds?: number | null
 }
 
+export type OverlayState = {
+  open: boolean
+  clickThrough: boolean
+}
+
 declare global {
   interface Window {
     aetherDesktop?: {
@@ -21,6 +26,12 @@ declare global {
       checkForUpdates: () => Promise<UpdateState>
       installUpdate: () => Promise<boolean>
       onUpdateState: (callback: (state: UpdateState) => void) => () => void
+      overlayToggle?: () => Promise<OverlayState>
+      overlayShow?: () => Promise<OverlayState>
+      overlayHide?: () => Promise<OverlayState>
+      overlayGetState?: () => Promise<OverlayState>
+      overlaySetClickThrough?: (enabled: boolean) => Promise<boolean>
+      onOverlayState?: (callback: (state: OverlayState) => void) => () => void
     }
   }
 }

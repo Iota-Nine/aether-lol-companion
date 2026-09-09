@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { fetchLive, fetchLaneMeta } from './api'
 import type { LiveSession, LolBuildGuide, MetaGuides, PlayerCard, TftCompGuide } from './types'
-import type { UpdateState } from './desktop'
+import type { UpdateState, OverlayState } from './desktop'
 import { HomeBoard } from './HomeBoard'
 import { itemIconUrl, resolveSpellIcon } from './ddragon'
 import './App.css'
@@ -701,6 +701,8 @@ export default function App() {
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [metaLane, setMetaLane] = useState<LaneId>('mid')
   const [creditGateOpen, setCreditGateOpen] = useState(true)
+  const [overlay, setOverlay] = useState<OverlayState>({ open: false, clickThrough: false })
+  const wasInGameRef = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -744,6 +746,16 @@ export default function App() {
     }
   }, [])
 
+  useEffect(() => {
+    const desk = window.aetherDesktop
+    if (!desk?.overlayGetState) return
+    void desk.overlayGetState().then(setOverlay)
+    const unsub = desk.onOverlayState?.(setOverlay)
+    return () => {
+      unsub?.()
+    }
+  }, [])
+
   const secondsLeft = live?.timer
     ? Math.max(0, Math.round(live.timer.adjustedTimeLeftInPhase / 1000))
     : null
@@ -780,6 +792,18 @@ export default function App() {
     ['EndOfGame', 'WaitingForStats', 'PreEndOfGame', 'TerminatedInError'].includes(phase)
   const showHome = isScoutMode && Boolean(live?.connected) && !isTft
   const showOfflineScout = isScoutMode && !live?.connected
+
+  // Auto-ouvre l’overlay au passage idle → in-game (desktop only)
+  useEffect(() => {
+    if (!window.aetherDesktop?.overlayShow) {
+      wasInGameRef.current = isInGame
+      return
+    }
+    if (isInGame && !wasInGameRef.current) {
+      void window.aetherDesktop.overlayShow().then(setOverlay)
+    }
+    wasInGameRef.current = isInGame
+  }, [isInGame])
 
   const clockLabel = useMemo(
     () =>
@@ -955,6 +979,16 @@ export default function App() {
         </div>
 
         <div className="command-actions">
+          {isDesktop && (
+            <button
+              type="button"
+              className={`overlay-toggle ${overlay.open ? 'on' : ''}`}
+              title="Overlay in-game (Ctrl+Shift+O)"
+              onClick={() => void window.aetherDesktop?.overlayToggle?.().then(setOverlay)}
+            >
+              {overlay.open ? 'OVERLAY ON' : 'OVERLAY'}
+            </button>
+          )}
           <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''} ${showHome ? 'home' : ''}`}>
             <i className="live-dot" />
             {isInGame ? 'STREAM 0.6s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
@@ -1149,8 +1183,8 @@ export default function App() {
       )}
 
       <footer className="hud-footer">
-        <span>AETHER HUD v1.6 · LIVE SCOREBOARD</span>
-        <span>Profil · historique · debrief · live 0.6s</span>
+        <span>AETHER HUD v1.7 · OVERLAY</span>
+        <span>Ctrl+Shift+O overlay · Ctrl+Shift+P click-through</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>
