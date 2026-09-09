@@ -338,7 +338,7 @@ function buildCompsFromSet(setName: string, champs: TftChamp[]): TftCompGuide[] 
       units,
       carry: carry.name,
       difficulty: carry.cost >= 5 ? 'Hard' : carry.cost >= 3 ? 'Medium' : 'Easy',
-      tip: `Priorise ${carry.name} (carry). Monte ${trait} en premier, splash flex selon le lobby.`,
+      tip: `Priorise ${carry.name} (carry). Monte ${trait} en premier, splash flex selon le lobby. Stats indicatives — vérifie lolchess/OP.GG.`,
     })
   })
 
@@ -381,7 +381,7 @@ export async function buildMetaGuides(params: {
     const { setName, comps } = await getTftComps()
     return {
       mode: 'tft',
-      patchNote: `Compos TFT suggérées · ${setName} (indicatif meta)`,
+      patchNote: `Compos TFT suggérées · ${setName} · stats indicatives — scout via OP.GG / lolchess`,
       lolBuilds: [],
       tftComps: comps,
     }
@@ -397,7 +397,8 @@ export async function buildMetaGuides(params: {
   const lolBuilds = await buildLolGuides(ids)
   return {
     mode: 'lol',
-    patchNote: 'Builds LoL suggérés selon les picks détectés (WR / items / keystone)',
+    patchNote:
+      'Builds indicatifs (items/keystone) · WR champ estimé — clique OP.GG / U.GG pour la meta live',
     lolBuilds,
     tftComps: [],
   }

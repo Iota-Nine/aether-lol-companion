@@ -60,10 +60,19 @@ function PlayerSlot({
   const playerWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
     : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  // En partie : WR joueur réel, pas le WR champ “estimé”
-  const displayWr = inGame || live ? playerWr : (player.championWinRate ?? playerWr)
+  // Priorité aux stats LCU réelles ; le WR champ n'est qu'indicatif (fallback)
+  const displayWr = playerWr ?? (inGame || live ? null : player.championWinRate)
+  const wrIsEstimate = playerWr == null && displayWr != null
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
+  const scoutLinks = (
+    [
+      { label: tft ? 'OP.GG TFT' : 'OP.GG', href: player.links?.opgg },
+      { label: 'PORO', href: player.links?.porofessor },
+      { label: 'U.GG', href: player.links?.uigg },
+      ...(tft ? [{ label: 'LOLCHESS', href: player.links?.lolchess }] : []),
+    ] as { label: string; href?: string }[]
+  ).filter((l): l is { label: string; href: string } => Boolean(l.href))
 
   return (
     <article
@@ -197,6 +206,22 @@ function PlayerSlot({
             )}
           </div>
         )}
+
+        {scoutLinks.length > 0 && (
+          <div className="slot-links">
+            {scoutLinks.map((link) => (
+              <a
+                key={link.label}
+                className="scout-link"
+                href={link.href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {link.label}
+              </a>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className={`slot-wr tone-${tone}`}>
@@ -209,7 +234,9 @@ function PlayerSlot({
           }
         >
           <strong>{displayWr != null ? displayWr.toFixed(1) : '—'}</strong>
-          <span>{live ? 'FORM' : tft ? 'FORM' : player.championWinRate != null && !inGame ? '%' : 'WR'}</span>
+          <span>
+            {wrIsEstimate ? 'EST' : live || tft ? 'FORM' : 'WR'}
+          </span>
         </div>
       </div>
     </article>
@@ -407,7 +434,7 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
       <header className="guides-head">
         <div>
           <p className="panel-kicker">META BUILDS</p>
-          <h2>BUILDS & WIN RATES</h2>
+          <h2>BUILDS & SCOUT</h2>
         </div>
         <span className="guides-count">{builds.length} champs</span>
       </header>
@@ -425,7 +452,7 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
             </div>
             <div className={`guide-wr tone-${wrTone(b.winRate)}`}>
               <strong>{b.winRate.toFixed(1)}%</strong>
-              <span>WR · {b.pickRate}% PR</span>
+              <span>EST · {b.pickRate}% PR</span>
             </div>
             <div className="guide-build">
               <span className="keystone">{b.keystone}</span>
@@ -438,6 +465,14 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
                 <span className="item-chip boots">{b.boots}</span>
               </div>
               <p>{b.tips}</p>
+              <div className="slot-links guide-links">
+                <a className="scout-link" href={b.links.opgg} target="_blank" rel="noreferrer">
+                  OP.GG BUILD
+                </a>
+                <a className="scout-link" href={b.links.uigg} target="_blank" rel="noreferrer">
+                  U.GG BUILD
+                </a>
+              </div>
             </div>
           </article>
         ))}

@@ -40,6 +40,7 @@ const FALLBACK_WINRATES: Record<string, { wr: number; pr: number; br: number; ti
   Pyke: { wr: 49.0, pr: 6.5, br: 12.8, tier: 'B' },
 }
 
+/** Stats champ de secours (pas de meta live officielle sans API Riot). */
 function hashWinRate(key: string): { wr: number; pr: number; br: number; tier: string } {
   if (FALLBACK_WINRATES[key]) return FALLBACK_WINRATES[key]
   let hash = 0

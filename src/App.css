@@ -1610,6 +1610,10 @@
   border-bottom-color: currentColor;
 }
 
+.guide-links {
+  margin-top: 8px;
+}
+
 .slot-wr {
   display: grid;
   place-items: center;

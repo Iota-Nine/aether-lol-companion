@@ -1,7 +1,7 @@
 {
   "name": "aether-lol-companion",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AETHER — Companion League of Legends desktop (LCU + OP.GG / Porofessor)",
   "author": "AETHER",
   "main": "electron/main.cjs",
@@ -94,7 +94,7 @@
     "concurrently": "^10.0.5",
     "electron": "^37.10.3",
     "electron-builder": "^26.15.3",
-    "esbuild": "^0.25.9",
+    "esbuild": "^0.27.0",
     "oxlint": "^1.79.0",
     "tsx": "^4.23.13",
     "typescript": "~6.0.2",
