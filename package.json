@@ -1,7 +1,7 @@
 {
   "name": "aether-lol-companion",
   "private": true,
-  "version": "1.0.10",
+  "version": "1.0.11",
   "description": "AETHER — Companion League of Legends desktop (LCU + OP.GG / Porofessor)",
   "author": "AETHER",
   "main": "electron/main.cjs",
@@ -29,6 +29,9 @@
     "files": [
       "electron/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/koffi/**"
     ],
     "extraResources": [
       {
@@ -81,6 +84,7 @@
     "cors": "^2.8.6",
     "electron-updater": "^6.8.9",
     "express": "^5.2.1",
+    "koffi": "^3.2.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

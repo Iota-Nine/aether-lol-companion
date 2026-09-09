@@ -1184,7 +1184,7 @@ export default function App() {
 
       <footer className="hud-footer">
         <span>AETHER HUD v1.7 · OVERLAY</span>
-        <span>Ctrl+Shift+O overlay · Ctrl+Shift+P click-through</span>
+        <span>Fenêtre sans bordure LoL · overlay topmost</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>

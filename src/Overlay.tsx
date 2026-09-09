@@ -89,6 +89,7 @@ export default function OverlayApp() {
       {!active && (
         <div className="overlay-idle">
           <p>En attente d’une partie LoL…</p>
+          <span>LoL en mode Fenêtre sans bordure (pas Plein écran exclusif)</span>
           <span>Ctrl+Shift+O · toggle · Ctrl+Shift+P · click-through</span>
           {error && <em>{error}</em>}
         </div>

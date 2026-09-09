@@ -4,6 +4,7 @@ const { spawn } = require('child_process')
 const http = require('http')
 const fs = require('fs')
 const { setupAutoUpdater } = require('./autoUpdate.cjs')
+const { forceTopmost, findLeagueWindowBounds } = require('./winTopmost.cjs')
 
 const isDev = !app.isPackaged
 const API_PORT = process.env.PORT || 8787
@@ -14,6 +15,10 @@ let mainWindow = null
 let overlayWindow = null
 let apiProcess = null
 let overlayClickThrough = false
+let overlayKeepAliveTimer = null
+/** Si l’utilisateur déplace l’overlay, on arrête de le re-pin tant qu’il est ouvert */
+let overlayUserMoved = false
+let overlayPinQuiet = false
 
 function waitForUrl(url, timeoutMs = 90000) {
   const start = Date.now()
@@ -100,21 +105,59 @@ function applyOverlayClickThrough(enabled) {
   return overlayClickThrough
 }
 
-function positionOverlay(win) {
-  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const { workArea } = display
+function positionOverlay(win, bounds) {
   const [ww, wh] = win.getSize()
-  const x = Math.round(workArea.x + workArea.width - ww - 24)
-  const y = Math.round(workArea.y + 48)
+  let x
+  let y
+  if (bounds && bounds.width > 100) {
+    x = Math.round(bounds.x + bounds.width - ww - 16)
+    y = Math.round(bounds.y + 48)
+  } else {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+    const { workArea } = display
+    x = Math.round(workArea.x + workArea.width - ww - 24)
+    y = Math.round(workArea.y + 48)
+  }
+  overlayPinQuiet = true
   win.setPosition(x, y)
+  setTimeout(() => {
+    overlayPinQuiet = false
+  }, 80)
+}
+
+function assertOverlayAboveGame() {
+  if (!overlayWindow || overlayWindow.isDestroyed() || !overlayWindow.isVisible()) return
+  forceTopmost(overlayWindow)
+  if (!overlayUserMoved) {
+    const league = findLeagueWindowBounds()
+    if (league) positionOverlay(overlayWindow, league)
+  }
+}
+
+function startOverlayKeepAlive() {
+  stopOverlayKeepAlive()
+  overlayKeepAliveTimer = setInterval(() => {
+    assertOverlayAboveGame()
+  }, 700)
+}
+
+function stopOverlayKeepAlive() {
+  if (overlayKeepAliveTimer) {
+    clearInterval(overlayKeepAliveTimer)
+    overlayKeepAliveTimer = null
+  }
 }
 
 function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    overlayWindow.show()
-    overlayWindow.focus()
+    // Ne JAMAIS focus() — ça descend League / vole le clavier
+    overlayWindow.showInactive()
+    forceTopmost(overlayWindow)
+    startOverlayKeepAlive()
     return overlayWindow
   }
+
+  overlayUserMoved = false
 
   overlayWindow = new BrowserWindow({
     width: 460,
@@ -126,9 +169,12 @@ function createOverlayWindow() {
     transparent: true,
     backgroundColor: '#00000000',
     hasShadow: false,
+    thickFrame: false,
     resizable: true,
     maximizable: false,
+    minimizable: false,
     fullscreenable: false,
+    focusable: false,
     skipTaskbar: true,
     autoHideMenuBar: true,
     title: 'AETHER Overlay',
@@ -141,19 +187,26 @@ function createOverlayWindow() {
     },
   })
 
-  overlayWindow.setAlwaysOnTop(true, 'screen-saver')
+  forceTopmost(overlayWindow)
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-  positionOverlay(overlayWindow)
+  positionOverlay(overlayWindow, findLeagueWindowBounds())
 
   const url = `${baseUiUrl()}?view=overlay`
   overlayWindow.loadURL(url)
 
   overlayWindow.once('ready-to-show', () => {
     overlayWindow?.showInactive()
+    forceTopmost(overlayWindow)
     applyOverlayClickThrough(overlayClickThrough)
+    startOverlayKeepAlive()
+  })
+
+  overlayWindow.on('move', () => {
+    if (!overlayPinQuiet) overlayUserMoved = true
   })
 
   overlayWindow.on('closed', () => {
+    stopOverlayKeepAlive()
     overlayWindow = null
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('overlay:state', { open: false, clickThrough: overlayClickThrough })
@@ -166,7 +219,13 @@ function createOverlayWindow() {
 function setOverlayOpen(open) {
   if (open) {
     createOverlayWindow()
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.showInactive()
+      forceTopmost(overlayWindow)
+      startOverlayKeepAlive()
+    }
   } else if (overlayWindow && !overlayWindow.isDestroyed()) {
+    stopOverlayKeepAlive()
     overlayWindow.hide()
   }
   const isOpen = Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible())
@@ -179,6 +238,7 @@ function setOverlayOpen(open) {
 function toggleOverlay() {
   const isOpen = Boolean(overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible())
   if (isOpen) {
+    stopOverlayKeepAlive()
     overlayWindow.hide()
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('overlay:state', { open: false, clickThrough: overlayClickThrough })
@@ -186,8 +246,10 @@ function toggleOverlay() {
     return { open: false, clickThrough: overlayClickThrough }
   }
   createOverlayWindow()
-  if (overlayWindow && !overlayWindow.isDestroyed() && !overlayWindow.isVisible()) {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
     overlayWindow.showInactive()
+    forceTopmost(overlayWindow)
+    startOverlayKeepAlive()
   }
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('overlay:state', { open: true, clickThrough: overlayClickThrough })
@@ -309,6 +371,8 @@ function registerShortcuts() {
     console.warn('[aether] Raccourcis overlay indisponibles:', error)
   }
 }
+
+app.commandLine.appendSwitch('enable-transparent-visuals')
 
 app.whenReady().then(async () => {
   try {
