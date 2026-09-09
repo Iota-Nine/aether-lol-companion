@@ -28,25 +28,58 @@ jobs:
       - name: Build UI + server
         run: npm run build
 
-      - name: Publish Windows Setup (NSIS)
+      - name: Build Windows installers
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          EP_DRAFT: "false"
-        run: npx electron-builder --win nsis --publish always
+          EP_DRAFT: 'false'
+        run: npx electron-builder --win nsis portable --publish never
 
-      - name: Build Portable (no publish race)
-        run: npx electron-builder --win portable --publish never
-
-      - name: Upload Portable to release
+      - name: Ensure GitHub release + upload assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
           $ver = (Get-Content package.json | ConvertFrom-Json).version
-          $portable = Get-ChildItem "release/AETHER-Portable-$ver.exe" -ErrorAction SilentlyContinue
-          if (-not $portable) { $portable = Get-ChildItem release/AETHER-Portable-*.exe | Select-Object -First 1 }
-          if ($portable) {
-            gh release upload "v$ver" $portable.FullName --clobber
-          } else {
-            Write-Host "Portable introuvable — skip"
+          $tag = "v$ver"
+          $setup = "release/AETHER-Setup-$ver.exe"
+          $blockmap = "release/AETHER-Setup-$ver.exe.blockmap"
+          $portable = "release/AETHER-Portable-$ver.exe"
+          $yml = "release/latest.yml"
+
+          if (-not (Test-Path $setup)) { throw "Missing $setup" }
+
+          # latest.yml requis pour electron-updater (généré si absent)
+          if (-not (Test-Path $yml)) {
+            $bytes = [IO.File]::ReadAllBytes((Resolve-Path $setup))
+            $sha = [Convert]::ToBase64String([Security.Cryptography.SHA512]::Create().ComputeHash($bytes))
+            $size = (Get-Item $setup).Length
+            $date = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+            @"
+          version: $ver
+          files:
+            - url: AETHER-Setup-$ver.exe
+              sha512: $sha
+              size: $size
+          path: AETHER-Setup-$ver.exe
+          sha512: $sha
+          releaseDate: '$date'
+          "@ | Set-Content -Path $yml -Encoding utf8
           }
+
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $ver --notes "AETHER $ver" --latest
+          } else {
+            gh release edit $tag --draft=false --latest
+          }
+
+          $uploads = @($setup, $yml)
+          if (Test-Path $blockmap) { $uploads += $blockmap }
+          if (Test-Path $portable) { $uploads += $portable }
+
+          gh release upload $tag @uploads --clobber
+
+          $names = gh api "repos/Iota-Nine/aether-lol-companion/releases/tags/$tag" --jq ".assets[].name"
+          Write-Host "Assets:`n$names"
+          if ($names -notmatch "AETHER-Setup-$ver.exe") { throw "Setup missing on release" }
+          if ($names -notmatch "latest.yml") { throw "latest.yml missing on release" }
