@@ -652,7 +652,15 @@ export default function App() {
     const desk = window.aetherDesktop
     if (!desk?.onUpdateState) return
     void desk.getUpdateState?.().then(setUpdate)
-    return desk.onUpdateState(setUpdate)
+    const unsub = desk.onUpdateState(setUpdate)
+    // Relance côté UI aussi (filet de sécu si l'app reste ouverte des heures)
+    const id = window.setInterval(() => {
+      void desk.checkForUpdates?.()
+    }, 5 * 60 * 1000)
+    return () => {
+      unsub()
+      window.clearInterval(id)
+    }
   }, [])
 
   const secondsLeft = live?.timer
@@ -713,6 +721,9 @@ export default function App() {
             <p className="credit-gate-feedback">
               Feedback / idées ?{' '}
               <a href="mailto:anissaanno94@gmail.com?subject=Feedback%20AETHER">anissaanno94@gmail.com</a>
+            </p>
+            <p className="credit-gate-discord">
+              Discord · <strong>sutabakusu</strong>
             </p>
             <button type="button" className="credit-gate-ok" autoFocus onClick={() => setCreditGateOpen(false)}>
               OK
@@ -780,7 +791,7 @@ export default function App() {
             {update.appVersion && <em>v{update.appVersion}</em>}
             {update.status === 'ready' && (
               <button type="button" onClick={() => void window.aetherDesktop?.installUpdate()}>
-                REDÉMARRER
+                INSTALLER MAINTENANT
               </button>
             )}
             {(update.status === 'error' || update.status === 'checking') && (

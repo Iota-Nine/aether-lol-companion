@@ -1,0 +1,17 @@
+---
+description: Toujours commit + push + release sans demander
+alwaysApply: true
+---
+
+# Publish automatique
+
+Après une feature / fix UI ou companion utile aux utilisateurs :
+
+1. Bump `package.json` version (patch)
+2. Commit avec message clair
+3. `git push origin HEAD`
+4. Tag `vX.Y.Z` + `git push origin vX.Y.Z` pour déclencher la release Windows
+5. Si la release GitHub est en draft → `gh release edit vX.Y.Z --draft=false --latest`
+
+Ne pas demander confirmation pour push / release sauf si secrets ou force-push.
+Ne jamais force-push main/master.

@@ -32,3 +32,33 @@ img {
   background: rgba(45, 212, 191, 0.35);
   color: #fff;
 }
+
+/* Scrollbar sombre (plus de barre blanche Windows) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #2dd4bf #0a0e16;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #070b12;
+  border-left: 1px solid rgba(45, 212, 191, 0.12);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #2dd4bf, #0f766e);
+  border: 2px solid #070b12;
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #5eead4, #14b8a6);
+}
+
+*::-webkit-scrollbar-corner {
+  background: #070b12;
+}

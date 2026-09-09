@@ -6,6 +6,7 @@ export type UpdateState = {
   progress: number
   message: string
   appVersion?: string
+  installInSeconds?: number | null
 }
 
 declare global {
