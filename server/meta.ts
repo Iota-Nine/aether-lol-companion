@@ -1,5 +1,5 @@
-import type { ChampionInfo } from './types.js'
-import { getChampionById, getAllChampions } from './champions.js'
+import { getChampionById, getAllChampions, getOpggPatch } from './champions.js'
+import { fetchOpggBuild, fetchOpggLaneTop, type OpggLane } from './opgg.js'
 
 export interface LolBuildGuide {
   championId: number
@@ -43,216 +43,89 @@ interface TftChamp {
   traits: string[]
 }
 
-const LOL_BUILDS: Record<
-  string,
-  { role: string; items: string[]; boots: string; keystone: string; tip: string }
-> = {
-  Ahri: {
-    role: 'Mid',
-    items: ['Luden', 'Shadowflame', 'Rabadon'],
-    boots: 'Sorcerer',
-    keystone: 'Electrocute',
-    tip: 'Poke puis combo burst R. Priorise Shadowflame vs tanks légers.',
-  },
-  Yasuo: {
-    role: 'Mid/Top',
-    items: ["Immortal Shieldbow", 'IE', 'Bloodthirster'],
-    boots: 'Berserker',
-    keystone: 'Conqueror',
-    tip: 'Stack Q, cherche le knock-up allié. IE 2e item après mythique crit.',
-  },
-  Jinx: {
-    role: 'ADC',
-    items: ['Kraken', 'PD', 'IE'],
-    boots: 'Berserker',
-    keystone: 'Fleet Footwork',
-    tip: 'Reset Rockets après kill. Kraken vs tanks, Galeforce vs poke.',
-  },
-  Thresh: {
-    role: 'Support',
-    items: ['Locket', 'Zeke', 'Knight Vow'],
-    boots: 'Mobility',
-    keystone: 'Aftershock',
-    tip: 'Hook engage / flay peel. Build tank aura pour protéger l’ADC.',
-  },
-  LeeSin: {
-    role: 'Jungle',
-    items: ['Eclipse', 'Black Cleaver', 'Maw'],
-    boots: 'Mercury',
-    keystone: 'Conqueror',
-    tip: 'Early ganks Q. Eclipse pour duellisme, Cleaver pour shred.',
-  },
-  Darius: {
-    role: 'Top',
-    items: ['Stridebreaker', 'Sterak', 'Dead Man'],
-    boots: 'Plated',
-    keystone: 'Conqueror',
-    tip: 'Stack bleed, flash dunk. Sterak après core anti-burst.',
-  },
-  Lux: {
-    role: 'Mid/Support',
-    items: ['Luden', 'Horizon', 'Rabadon'],
-    boots: 'Sorcerer',
-    keystone: 'Dark Harvest',
-    tip: 'Poke E + snare Q. Horizon Focus pour vision / burst.',
-  },
-  Zed: {
-    role: 'Mid',
-    items: ['Eclipse', 'Youmuu', 'Serylda'],
-    boots: 'Ionian',
-    keystone: 'Electrocute',
-    tip: 'Roam mid-game. Youmuu pour vitesse, Serylda vs tanks.',
-  },
-  Kaisa: {
-    role: 'ADC',
-    items: ['Kraken', 'Nashor', 'Rabadon'],
-    boots: 'Berserker',
-    keystone: 'Hail of Blades',
-    tip: 'Evolve Q puis E. Hybrid on-hit / AP selon game.',
-  },
-  Sett: {
-    role: 'Top',
-    items: ['Stridebreaker', 'Sterak', 'Warmog'],
-    boots: 'Plated',
-    keystone: 'Conqueror',
-    tip: 'W true damage. Stride pour sticky fights.',
-  },
-  Yone: {
-    role: 'Mid/Top',
-    items: ['Shieldbow', 'IE', 'DeathDance'],
-    boots: 'Berserker',
-    keystone: 'Fleet Footwork',
-    tip: 'E in/out. Crit path standard après Shieldbow.',
-  },
-  MissFortune: {
-    role: 'ADC',
-    items: ['Youmuu', 'Collector', 'IE'],
-    boots: 'Ionian',
-    keystone: 'Press the Attack',
-    tip: 'Lethality poke. Ult en side angle.',
-  },
-  Nami: {
-    role: 'Support',
-    items: ['Moonstone', 'Staff Flowing Water', 'Ardent'],
-    boots: 'Ionian',
-    keystone: 'Summon Aery',
-    tip: 'Enchanter peel. Bubble engage / save.',
-  },
-  Viego: {
-    role: 'Jungle',
-    items: ['Trinity', 'Kraken', 'DeathDance'],
-    boots: 'Mercury',
-    keystone: 'Conqueror',
-    tip: 'Reset possess. Trinity first item core.',
-  },
-  Garen: {
-    role: 'Top',
-    items: ['Stridebreaker', 'Dead Man', 'Force of Nature'],
-    boots: 'Mercury',
-    keystone: 'Conqueror',
-    tip: 'Silence Q + spin. Tanky second items.',
-  },
-  Ezreal: {
-    role: 'ADC',
-    items: ['Trinity', 'Manamune', 'Serylda'],
-    boots: 'Ionian',
-    keystone: 'Conqueror',
-    tip: 'Poke poke poke. Manamune evolve ASAP.',
-  },
-}
-
-function defaultBuild(champ: ChampionInfo): {
-  role: string
-  items: string[]
-  boots: string
-  keystone: string
-  tip: string
-} {
-  const isMage = champ.tags.includes('Mage')
-  const isMarksman = champ.tags.includes('Marksman')
-  const isAssassin = champ.tags.includes('Assassin')
-  const isTank = champ.tags.includes('Tank')
-  const isSupport = champ.tags.includes('Support')
-  if (isMarksman) {
-    return {
-      role: 'ADC',
-      items: ['Kraken', 'PD', 'IE'],
-      boots: 'Berserker',
-      keystone: 'Lethal Tempo',
-      tip: 'Core crit. Adapte le 2e item selon front ennemi.',
-    }
-  }
-  if (isMage) {
-    return {
-      role: 'Mid',
-      items: ['Luden', 'Shadowflame', 'Rabadon'],
-      boots: 'Sorcerer',
-      keystone: 'Electrocute',
-      tip: 'Burst AP. Shadowflame vs shields.',
-    }
-  }
-  if (isAssassin) {
-    return {
-      role: 'Mid/Jungle',
-      items: ['Eclipse', 'Youmuu', 'Serylda'],
-      boots: 'Ionian',
-      keystone: 'Electrocute',
-      tip: 'Lethality tempo. Roam après 1 item.',
-    }
-  }
-  if (isSupport) {
-    return {
-      role: 'Support',
-      items: ['Locket', 'Zeke', 'Redemption'],
-      boots: 'Mobility',
-      keystone: 'Guardian',
-      tip: 'Utilitaire / peel. Adapte aura au compo.',
-    }
-  }
-  if (isTank) {
-    return {
-      role: 'Top/Jungle',
-      items: ['Heartsteel', 'Spirit Visage', 'Thornmail'],
-      boots: 'Plated',
-      keystone: 'Grasp',
-      tip: 'Frontline tank. Stack HP puis résistances.',
-    }
-  }
-  return {
-    role: champ.tags[0] || 'Flex',
-    items: ['Trinity', 'Sterak', 'DD'],
-    boots: 'Mercury',
-    keystone: 'Conqueror',
-    tip: 'Build bruiser polyvalent.',
-  }
-}
-
-export async function buildLolGuides(championIds: number[]): Promise<LolBuildGuide[]> {
+export async function buildLolGuides(
+  championIds: number[],
+  positions?: Record<number, string | null | undefined>,
+): Promise<LolBuildGuide[]> {
   const unique = [...new Set(championIds.filter((id) => id > 0))]
   const guides: LolBuildGuide[] = []
+
   for (const id of unique.slice(0, 10)) {
     const champ = await getChampionById(id)
     if (!champ) continue
-    const preset = LOL_BUILDS[champ.key] ?? defaultBuild(champ)
+    const opgg = await fetchOpggBuild({
+      championId: champ.id,
+      championKey: champ.key,
+      position: positions?.[id] ?? null,
+      region: 'euw',
+    })
+
     guides.push({
       championId: champ.id,
       championName: champ.name,
       championImage: champ.image,
-      role: preset.role,
-      winRate: champ.winRate,
-      pickRate: champ.pickRate,
-      tier: champ.tier,
-      coreItems: preset.items,
-      boots: preset.boots,
-      keystone: preset.keystone,
-      tips: preset.tip,
+      role: opgg?.role || '—',
+      winRate: opgg?.winRate || champ.winRate,
+      pickRate: opgg?.pickRate || champ.pickRate,
+      tier: opgg?.tier || champ.tier,
+      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['—'],
+      boots: opgg?.boots || '—',
+      keystone: opgg?.keystone || '—',
+      tips: opgg?.tip || 'Données OP.GG indisponibles pour ce champion',
       links: {
         opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build`,
         uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
       },
     })
   }
+
   return guides.sort((a, b) => b.winRate - a.winRate)
+}
+
+/** Top 7 meta OP.GG d'une lane + builds. */
+export async function buildLaneMetaGuides(
+  lane: OpggLane,
+  limit = 7,
+): Promise<MetaGuides> {
+  const { patch, champs } = await fetchOpggLaneTop(lane, limit, 'euw')
+  const positions: Record<number, string> = {}
+  for (const c of champs) positions[c.championId] = lane
+
+  const guides: LolBuildGuide[] = []
+  for (const row of champs) {
+    const champ = await getChampionById(row.championId)
+    if (!champ) continue
+    const opgg = await fetchOpggBuild({
+      championId: champ.id,
+      championKey: champ.key,
+      position: lane,
+      region: 'euw',
+    })
+    guides.push({
+      championId: champ.id,
+      championName: champ.name,
+      championImage: champ.image,
+      role: lane.toUpperCase(),
+      winRate: opgg?.winRate || row.winRate,
+      pickRate: opgg?.pickRate || row.pickRate,
+      tier: opgg?.tier || row.tier,
+      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['—'],
+      boots: opgg?.boots || '—',
+      keystone: opgg?.keystone || '—',
+      tips: opgg?.tip || `Meta OP.GG ${lane.toUpperCase()} · rank #${row.tierRank}`,
+      links: {
+        opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build?position=${lane}`,
+        uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
+      },
+    })
+  }
+
+  return {
+    mode: 'lol',
+    patchNote: `Top ${limit} ${lane.toUpperCase()} · OP.GG patch ${patch} · ranked`,
+    lolBuilds: guides,
+    tftComps: [],
+  }
 }
 
 let tftCache: { loadedAt: number; setName: string; champs: TftChamp[]; comps: TftCompGuide[] } | null =
@@ -264,13 +137,13 @@ async function loadTftSet(): Promise<{ setName: string; champs: TftChamp[] }> {
   const json = (await res.json()) as {
     sets: Record<string, { name?: string; champions?: Record<string, TftChamp> }>
   }
-  // Préfère le set avec le plus d'unités traitées récentes (17 > 16 > 15…)
   const preferred = ['17', '16', '15', '18']
   let bestId = preferred.find((id) => json.sets[id]) ?? Object.keys(json.sets).pop()!
   let best = json.sets[bestId]!
-  let champs = Object.values(best.champions ?? {}).filter((c) => c.traits?.length && c.cost >= 1 && c.cost <= 5)
+  let champs = Object.values(best.champions ?? {}).filter(
+    (c) => c.traits?.length && c.cost >= 1 && c.cost <= 5,
+  )
 
-  // Si trop peu d'unités, fallback
   if (champs.length < 20) {
     for (const id of Object.keys(json.sets).reverse()) {
       const s = json.sets[id]!
@@ -311,7 +184,6 @@ function buildCompsFromSet(setName: string, champs: TftChamp[]): TftCompGuide[] 
     if (line.length < 4) return
     const carry = line.find((c) => c.cost >= 4) ?? line[0]!
     const core = line.slice(0, 6)
-    // splash flex units from other traits
     const splash = champs
       .filter((c) => !core.some((x) => x.name === c.name) && c.cost >= 2)
       .sort((a, b) => b.cost - a.cost)
@@ -334,15 +206,17 @@ function buildCompsFromSet(setName: string, champs: TftChamp[]): TftCompGuide[] 
       winRate: wr,
       avgPlace: avg,
       playStyle: styles[i % styles.length]!,
-      traits: [trait, ...new Set(core.flatMap((c) => c.traits).filter((t) => t !== trait))].slice(0, 4),
+      traits: [trait, ...new Set(core.flatMap((c) => c.traits).filter((t) => t !== trait))].slice(
+        0,
+        4,
+      ),
       units,
       carry: carry.name,
       difficulty: carry.cost >= 5 ? 'Hard' : carry.cost >= 3 ? 'Medium' : 'Easy',
-      tip: `Priorise ${carry.name} (carry). Monte ${trait} en premier, splash flex selon le lobby. Stats indicatives — vérifie lolchess/OP.GG.`,
+      tip: `Priorise ${carry.name} (carry). Monte ${trait} en premier.`,
     })
   })
 
-  // Dedicated strong archetypes if we have enough traits
   if (comps.length < 4 && champs.length) {
     const expensive = [...champs].sort((a, b) => b.cost - a.cost).slice(0, 8)
     comps.push({
@@ -360,7 +234,7 @@ function buildCompsFromSet(setName: string, champs: TftChamp[]): TftCompGuide[] 
     })
   }
 
-  return comps.slice(0, 6).map((c) => ({ ...c, tip: `${c.tip} · Meta ${setName}` }))
+  return comps.slice(0, 6).map((c) => ({ ...c, tip: `${c.tip} · ${setName}` }))
 }
 
 export async function getTftComps(force = false): Promise<{ setName: string; comps: TftCompGuide[] }> {
@@ -381,7 +255,7 @@ export async function buildMetaGuides(params: {
     const { setName, comps } = await getTftComps()
     return {
       mode: 'tft',
-      patchNote: `Compos TFT suggérées · ${setName} · stats indicatives — scout via OP.GG / lolchess`,
+      patchNote: `Compos TFT · ${setName}`,
       lolBuilds: [],
       tftComps: comps,
     }
@@ -389,16 +263,19 @@ export async function buildMetaGuides(params: {
 
   let ids = params.championIds ?? []
   if (!ids.length) {
-    // Top WR champs as default suggestions
     const all = await getAllChampions()
-    ids = [...all].sort((a, b) => b.winRate - a.winRate).slice(0, 6).map((c) => c.id)
+    ids = [...all]
+      .filter((c) => c.winRate > 0)
+      .sort((a, b) => b.winRate - a.winRate)
+      .slice(0, 6)
+      .map((c) => c.id)
   }
 
   const lolBuilds = await buildLolGuides(ids)
+  const patch = await getOpggPatch()
   return {
     mode: 'lol',
-    patchNote:
-      'Builds indicatifs (items/keystone) · WR champ estimé — clique OP.GG / U.GG pour la meta live',
+    patchNote: `Meta OP.GG · patch ${patch} · ranked Platinum+ (EUW)`,
     lolBuilds,
     tftComps: [],
   }

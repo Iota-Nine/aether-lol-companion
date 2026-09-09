@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import https from 'node:https'
+import http from 'node:http'
 import { execSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -124,37 +125,41 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
 
 /** Live Client Data API (en partie uniquement) — port 2999 */
 export function liveClientGet<T>(endpoint: string): Promise<T | null> {
-  return new Promise((resolve) => {
-    const req = https.request(
-      {
-        hostname: '127.0.0.1',
-        port: 2999,
-        path: endpoint,
-        method: 'GET',
-        rejectUnauthorized: false,
-        headers: { Accept: 'application/json' },
-      },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on('data', (chunk) => chunks.push(chunk))
-        res.on('end', () => {
-          if (res.statusCode === 404 || !res.statusCode || res.statusCode >= 400) {
-            resolve(null)
-            return
-          }
-          try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as T)
-          } catch {
-            resolve(null)
-          }
-        })
-      },
-    )
-    req.on('error', () => resolve(null))
-    req.setTimeout(2000, () => {
-      req.destroy()
-      resolve(null)
+  const tryOnce = (protocol: 'https' | 'http') =>
+    new Promise<T | null>((resolve) => {
+      const lib = protocol === 'https' ? https : http
+      const req = lib.request(
+        {
+          hostname: '127.0.0.1',
+          port: 2999,
+          path: endpoint,
+          method: 'GET',
+          rejectUnauthorized: false,
+          headers: { Accept: 'application/json' },
+        },
+        (res) => {
+          const chunks: Buffer[] = []
+          res.on('data', (chunk) => chunks.push(chunk))
+          res.on('end', () => {
+            if (res.statusCode === 404 || !res.statusCode || res.statusCode >= 400) {
+              resolve(null)
+              return
+            }
+            try {
+              resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')) as T)
+            } catch {
+              resolve(null)
+            }
+          })
+        },
+      )
+      req.on('error', () => resolve(null))
+      req.setTimeout(4000, () => {
+        req.destroy()
+        resolve(null)
+      })
+      req.end()
     })
-    req.end()
-  })
+
+  return tryOnce('https').then(async (data) => data ?? tryOnce('http'))
 }

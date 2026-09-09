@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { fetchLive } from './api'
-import type { LiveSession, LolBuildGuide, PlayerCard, TftCompGuide } from './types'
+import { fetchLive, fetchLaneMeta } from './api'
+import type { LiveSession, LolBuildGuide, MetaGuides, PlayerCard, TftCompGuide } from './types'
 import type { UpdateState } from './desktop'
 import './App.css'
 
@@ -60,9 +60,9 @@ function PlayerSlot({
   const playerWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
     : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  // Priorité aux stats LCU réelles ; le WR champ n'est qu'indicatif (fallback)
+  // Priorité aux stats LCU joueur ; sinon WR champion OP.GG
   const displayWr = playerWr ?? (inGame || live ? null : player.championWinRate)
-  const wrIsEstimate = playerWr == null && displayWr != null
+  const wrIsOpgg = playerWr == null && displayWr != null && displayWr > 0
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
 
@@ -89,15 +89,17 @@ function PlayerSlot({
             ? live.isDead
               ? `DEAD ${live.respawnTimer}s`
               : 'LIVE'
-            : tft
-              ? player.locked
-                ? 'INGAME'
-                : 'LOBBY'
-              : status === 'locked'
-                ? 'LOCK'
-                : status === 'intent'
-                  ? 'HOVER'
-                  : 'WAIT'}
+            : inGame
+              ? 'INGAME'
+              : tft
+                ? player.locked
+                  ? 'INGAME'
+                  : 'LOBBY'
+                : status === 'locked'
+                  ? 'LOCK'
+                  : status === 'intent'
+                    ? 'HOVER'
+                    : 'WAIT'}
         </div>
       </div>
 
@@ -211,7 +213,7 @@ function PlayerSlot({
         >
           <strong>{displayWr != null ? displayWr.toFixed(1) : '—'}</strong>
           <span>
-            {wrIsEstimate ? 'EST' : live || tft ? 'FORM' : 'WR'}
+            {wrIsOpgg ? 'OP.GG' : live || tft ? 'FORM' : 'WR'}
           </span>
         </div>
       </div>
@@ -403,20 +405,121 @@ function InGameBoard({ live }: { live: LiveSession }) {
   )
 }
 
-function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
-  if (!builds.length) return null
+const LANES = [
+  { id: 'top', label: 'TOP' },
+  { id: 'jungle', label: 'JUNGLE' },
+  { id: 'mid', label: 'MID' },
+  { id: 'adc', label: 'ADC' },
+  { id: 'support', label: 'SUPPORT' },
+] as const
+
+type LaneId = (typeof LANES)[number]['id']
+
+function LanePicker({
+  lane,
+  onChange,
+  sticky,
+}: {
+  lane: LaneId
+  onChange: (lane: LaneId) => void
+  sticky?: boolean
+}) {
   return (
-    <section className="guides-panel lol-guides">
+    <nav
+      className={`lane-dock ${sticky ? 'is-sticky' : ''}`}
+      aria-label="Sélecteur de lane meta OP.GG"
+    >
+      <div className="lane-dock-copy">
+        <span className="lane-dock-key">LANE META</span>
+        <strong>TOP · JGL · MID · ADC · SUP</strong>
+      </div>
+      <div className="lane-switch" role="tablist" aria-label="Choisir une lane">
+        {LANES.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            role="tab"
+            aria-selected={lane === l.id}
+            className={`lane-btn ${lane === l.id ? 'active' : ''}`}
+            onClick={() => onChange(l.id)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function LolBuildsPanel({
+  lane,
+  onLaneChange,
+  fallbackBuilds,
+  scout,
+}: {
+  lane: LaneId
+  onLaneChange: (lane: LaneId) => void
+  fallbackBuilds?: LolBuildGuide[]
+  scout?: boolean
+}) {
+  const [meta, setMeta] = useState<MetaGuides | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    void fetchLaneMeta(lane, 7)
+      .then((data) => {
+        if (!cancelled) setMeta(data)
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur meta')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [lane])
+
+  const builds = meta?.lolBuilds?.length ? meta.lolBuilds : fallbackBuilds ?? []
+
+  return (
+    <section className={`guides-panel lol-guides ${scout ? 'scout-main' : ''}`} id="meta-opgg">
       <header className="guides-head">
         <div>
-          <p className="panel-kicker">META BUILDS</p>
-          <h2>BUILDS & SCOUT</h2>
+          <p className="panel-kicker">{scout ? 'META SCOUT · SANS LEAGUE' : 'META OP.GG'}</p>
+          <h2>TOP 7 · {lane.toUpperCase()}</h2>
         </div>
-        <span className="guides-count">{builds.length} champs</span>
+        <span className="guides-count">{loading ? '…' : `${builds.length} champs`}</span>
       </header>
-      <div className="guides-list">
-        {builds.map((b) => (
-          <article key={b.championId} className="guide-card">
+
+      <div className="lane-switch lane-switch-inline" role="tablist" aria-label="Changer de lane">
+        {LANES.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            role="tab"
+            aria-selected={lane === l.id}
+            className={`lane-btn ${lane === l.id ? 'active' : ''}`}
+            onClick={() => onLaneChange(l.id)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+
+      {meta?.patchNote && <p className="lane-meta-note">{meta.patchNote}</p>}
+      {error && <p className="lane-meta-error">{error}</p>}
+      {loading && !builds.length && <p className="lane-meta-note">Chargement meta OP.GG…</p>}
+
+      <div className={`guides-list ${loading ? 'is-loading' : ''}`}>
+        {builds.map((b, i) => (
+          <article key={`${lane}-${b.championId}`} className="guide-card">
+            <div className="guide-rank">#{i + 1}</div>
             <div className="guide-champ">
               {b.championImage ? <img src={b.championImage} alt={b.championName} /> : null}
               <div>
@@ -428,7 +531,7 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
             </div>
             <div className={`guide-wr tone-${wrTone(b.winRate)}`}>
               <strong>{b.winRate.toFixed(1)}%</strong>
-              <span>EST · {b.pickRate}% PR</span>
+              <span>OP.GG · {b.pickRate}% PR</span>
             </div>
             <div className="guide-build">
               <span className="keystone">{b.keystone}</span>
@@ -438,7 +541,7 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
                     {item}
                   </span>
                 ))}
-                <span className="item-chip boots">{b.boots}</span>
+                {b.boots !== '—' && <span className="item-chip boots">{b.boots}</span>}
               </div>
               <p>{b.tips}</p>
             </div>
@@ -515,6 +618,7 @@ export default function App() {
   const [tick, setTick] = useState(0)
   const [syncFlash, setSyncFlash] = useState(false)
   const [update, setUpdate] = useState<UpdateState | null>(null)
+  const [metaLane, setMetaLane] = useState<LaneId>('mid')
 
   const refresh = useCallback(async () => {
     try {
@@ -561,9 +665,22 @@ export default function App() {
       : 'OFFLINE'
 
   const connectionTone = loading ? 'sync' : live?.connected ? 'live' : 'offline'
+  // Lanes meta = permanentes dès que ce n'est PAS une session TFT active
   const isTft = live?.mode === 'tft'
+  const showLolLanes = !isTft
   const tftPlayers = live?.players?.length ? live.players : live?.allies ?? []
-  const isInGame = Boolean(live?.inGame?.active)
+  const phase = live?.phase ?? 'Idle'
+  const isInGame =
+    Boolean(live?.inGame?.active) ||
+    ['InProgress', 'GameStart', 'Reconnect'].includes(phase)
+  const inChampSelect =
+    !isInGame &&
+    (phase === 'ChampSelect' ||
+      Boolean(live?.timer) ||
+      (live?.allies?.some((p) => p.championId || p.isPickIntent) ?? false))
+  // Mode scout : meta OP.GG sans League / hors draft / hors partie
+  const isScoutMode = showLolLanes && !isInGame && !inChampSelect
+  const showDraftHud = showLolLanes && (isInGame || inChampSelect)
 
   const clockLabel = useMemo(
     () =>
@@ -606,7 +723,9 @@ export default function App() {
                 ? 'LIVE MATCH NEURAL LINK'
                 : isTft
                   ? 'TFT Companion Desktop'
-                  : 'LoL Companion Desktop'}
+                  : isScoutMode
+                    ? 'Meta OP.GG · sans League'
+                    : 'LoL Companion Desktop'}
             </span>
           </div>
           <div className="titlebar-controls">
@@ -661,7 +780,13 @@ export default function App() {
             <i className="mark-ring" />
           </div>
           <div className="brand-copy">
-            <p className="brand-eyebrow">{isInGame ? 'NEURAL OVERLAY · REALTIME' : 'COMPANION SYSTEM'}</p>
+            <p className="brand-eyebrow">
+              {isInGame
+                ? 'NEURAL OVERLAY · REALTIME'
+                : isScoutMode
+                  ? 'META SCOUT · SANS CLIENT'
+                  : 'COMPANION SYSTEM'}
+            </p>
             <h1>AETHER</h1>
           </div>
         </div>
@@ -707,9 +832,9 @@ export default function App() {
         </div>
 
         <div className="command-actions">
-          <div className={`live-badge ${isInGame ? 'hot' : ''}`}>
+          <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''}`}>
             <i className="live-dot" />
-            {isInGame ? 'STREAM 0.8s' : 'CLIENT LIVE'}
+            {isInGame ? 'STREAM 0.8s' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
             <em>#{tick}</em>
           </div>
           <button type="button" className="icon-btn" onClick={() => void refresh()} title="Rafraîchir">
@@ -719,15 +844,27 @@ export default function App() {
         </div>
       </header>
 
+      {/* Barre lanes permanente — disponible sans League */}
+      {showLolLanes && <LanePicker lane={metaLane} onChange={setMetaLane} sticky />}
+
       <section className="status-strip">
         <div className="status-message">
-          <span className="status-key">{isInGame ? 'LIVE FEED' : 'STATUS'}</span>
-          <p>{live?.message ?? 'Initialisation du système compagnon…'}</p>
+          <span className="status-key">
+            {isInGame ? 'LIVE FEED' : isScoutMode ? 'META SCOUT' : 'STATUS'}
+          </span>
+          <p>
+            {live?.message ??
+              'Mode meta solo — choisis une lane (TOP / JGL / MID / ADC / SUP). League n’est pas requis.'}
+          </p>
         </div>
         <div className="status-feed">
-          <span>LCU READ-ONLY</span>
+          <span>{isScoutMode ? 'SANS CLIENT OK' : 'LCU READ-ONLY'}</span>
           <span>
-            {isInGame ? 'LIVE CLIENT · KDA / CS / OR / EVENTS' : 'DATA LCU · RANKED + HISTORIQUE'}
+            {isInGame
+              ? 'LIVE CLIENT · KDA / CS / OR / EVENTS'
+              : isScoutMode
+                ? 'TOP 7 OP.GG PAR LANE'
+                : 'DATA LCU · RANKED + HISTORIQUE'}
           </span>
           <span>FAIR-PLAY MODE</span>
         </div>
@@ -777,7 +914,8 @@ export default function App() {
         </>
       )}
 
-      {live && !isTft && (
+      {/* Draft / in-game uniquement quand une vraie session LoL tourne */}
+      {live && showDraftHud && (
         <>
           <section className={`vs-hud ${isInGame ? 'vs-live' : ''}`}>
             <div className="vs-side ally">
@@ -845,17 +983,29 @@ export default function App() {
             />
           </main>
 
-          {live.guides?.patchNote && <p className="guides-note">{live.guides.patchNote}</p>}
-          <LolBuildsPanel builds={live.guides?.lolBuilds ?? []} />
-          {!isInGame && (live.mode === 'idle' || (live.guides?.tftComps?.length ?? 0) > 0) && (
-            <TftCompsPanel comps={live.guides?.tftComps ?? []} />
+          {live.guides?.patchNote && !isInGame && (
+            <p className="guides-note">{live.guides.patchNote}</p>
           )}
         </>
       )}
 
+      {/* Meta OP.GG = contenu principal hors TFT (avec ou sans League) */}
+      {showLolLanes && (
+        <LolBuildsPanel
+          lane={metaLane}
+          onLaneChange={setMetaLane}
+          fallbackBuilds={live?.guides?.lolBuilds ?? []}
+          scout={isScoutMode}
+        />
+      )}
+
+      {isScoutMode && (live?.guides?.tftComps?.length ?? 0) > 0 && (
+        <TftCompsPanel comps={live?.guides?.tftComps ?? []} />
+      )}
+
       <footer className="hud-footer">
-        <span>AETHER HUD v1.3 · NEURAL LIVE</span>
-        <span>Local LCU bridge · lecture seule</span>
+        <span>AETHER HUD v1.4 · META SCOUT</span>
+        <span>Fonctionne sans League · live auto au draft</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>

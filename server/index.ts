@@ -16,11 +16,11 @@ import {
   type LiveClientPlayer,
   type GameflowSession,
 } from './tft.js'
-import { buildMetaGuides } from './meta.js'
+import { buildMetaGuides, buildLaneMetaGuides } from './meta.js'
 import type { LiveSession } from './types.js'
 import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
-import { buildLolInGameSession } from './ingame.js'
+import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
   try {
@@ -87,9 +87,9 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
       const tft = await buildMetaGuides({ mode: 'tft' })
       const lol = await buildMetaGuides({ mode: 'lol', championIds: [] })
       live.guides = {
-        mode: 'tft',
-        patchNote: 'Suggestions meta (en attente de lobby)',
-        lolBuilds: lol.lolBuilds.slice(0, 4),
+        mode: 'lol',
+        patchNote: 'Suggestions meta OP.GG (en attente de lobby LoL)',
+        lolBuilds: lol.lolBuilds.slice(0, 7),
         tftComps: tft.tftComps,
       }
     }
@@ -134,6 +134,22 @@ export function createApp() {
     res.json(champ)
   })
 
+  app.get('/api/meta/lane/:lane', async (req, res) => {
+    try {
+      const laneRaw = String(req.params.lane || 'mid').toLowerCase()
+      const allowed = new Set(['top', 'jungle', 'mid', 'adc', 'support'])
+      if (!allowed.has(laneRaw)) {
+        res.status(400).json({ error: 'Lane invalide' })
+        return
+      }
+      const limit = Math.min(10, Math.max(1, Number(req.query.limit) || 7))
+      const guides = await buildLaneMetaGuides(laneRaw as 'top' | 'jungle' | 'mid' | 'adc' | 'support', limit)
+      res.json(guides)
+    } catch (error) {
+      res.status(500).json({ error: String(error) })
+    }
+  })
+
   app.get('/api/live', async (req, res) => {
     try {
       await loadChampions()
@@ -166,7 +182,8 @@ export function createApp() {
               phase: 'Idle',
               region: 'euw',
               mode: 'idle',
-              message: 'Client League introuvable. Lance League of Legends / TFT.',
+              message:
+                'Mode meta solo — League non requis. Choisis une lane pour le top 7 OP.GG.',
             }),
           ),
         )
@@ -335,24 +352,21 @@ export function createApp() {
         }
       }
 
-      // LoL in-game via gameflow teams if liveclient unavailable
-      if (inGame && gameflow?.gameData?.teamOne?.length) {
-        const live = await buildTftFromGameflow({
+      // LoL in-game via gameflow (scoreboard + images) si Live Client down
+      if (inGame && !tft && gameflow?.gameData && (gameflow.gameData.teamOne?.length || gameflow.gameData.teamTwo?.length)) {
+        const live = await buildLolFromGameflow({
           lockfile,
           connected: true,
           phase,
           region,
+          queueName: queueLabel(queueId, gameMode),
           session: gameflow,
           currentSummoner,
         })
-        // Force lol mode if not TFT
-        if (!tft) {
-          live.mode = 'lol'
-          live.queueName = queueLabel(queueId, gameMode)
-          live.message = `Partie LoL en cours — ${live.players.length} joueurs.`
+        if (live) {
+          res.json(await withGuides(live, lockfile))
+          return
         }
-        res.json(await withGuides(live, lockfile))
-        return
       }
 
       const you = currentSummoner?.gameName
@@ -368,8 +382,8 @@ export function createApp() {
             mode: lobby ? 'lol' : 'idle',
             queueName: queueLabel(queueId, gameMode),
             message: you
-              ? `Connecté (${you}). ${lobby ? `Lobby ${queueLabel(queueId, gameMode)} — ` : ''}En attente du draft / de la partie…`
-              : 'Client League détecté. En attente du lobby / draft…',
+              ? `Connecté (${you}). Meta OP.GG dispo — le draft s’affichera en champ select.`
+              : 'Client détecté. Meta OP.GG dispo sans partie — le live s’active au draft.',
           }),
           lockfile,
         ),

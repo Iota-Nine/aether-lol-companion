@@ -1,7 +1,8 @@
-import { liveClientGet } from './lcu.js'
-import { getAllChampions } from './champions.js'
-import type { LiveSession, PlayerCard, TeamSide } from './types.js'
+import { liveClientGet, lcuGet } from './lcu.js'
+import { getAllChampions, getChampionById } from './champions.js'
+import type { LiveSession, PlayerCard, TeamSide, LockfileData } from './types.js'
 import { buildProfileLinks, normalizeRegion, queueLabel } from './profiles.js'
+import type { GameflowSession } from './tft.js'
 
 export interface InGameItem {
   itemID: number
@@ -534,6 +535,171 @@ export async function buildLolInGameSession(params: {
       mapName: ingame.mapName,
       events: ingame.events,
       teamTotals: ingame.teamTotals,
+    },
+  }
+}
+
+/** Fallback LoL in-game via gameflow LCU (quand Live Client 2999 est down) */
+export async function buildLolFromGameflow(params: {
+  lockfile: LockfileData
+  connected: boolean
+  phase: string
+  region: string
+  queueName?: string
+  session: GameflowSession
+  currentSummoner?: { gameName?: string; tagLine?: string; puuid?: string } | null
+}): Promise<LiveSession | null> {
+  const teamOne = params.session.gameData?.teamOne ?? []
+  const teamTwo = params.session.gameData?.teamTwo ?? []
+  if (!teamOne.length && !teamTwo.length) return null
+
+  const region = normalizeRegion(params.region)
+  const mePuuid = params.currentSummoner?.puuid
+  const meName = params.currentSummoner?.gameName?.toLowerCase()
+
+  // Déterminer mon côté
+  let mySide: 'one' | 'two' = 'one'
+  if (mePuuid) {
+    if (teamTwo.some((p) => p.puuid === mePuuid)) mySide = 'two'
+  } else if (meName) {
+    for (const raw of teamTwo) {
+      if (!raw.puuid) continue
+      const resolved =
+        (await lcuGet<{ gameName?: string }>(params.lockfile, `/lol-summoner/v1/summoners/puuid/${raw.puuid}`)) ||
+        (await lcuGet<{ gameName?: string }>(params.lockfile, `/lol-summoner/v2/summoners/puuid/${raw.puuid}`))
+      if (resolved?.gameName?.toLowerCase() === meName) {
+        mySide = 'two'
+        break
+      }
+    }
+  }
+
+  const allyRaw = mySide === 'one' ? teamOne : teamTwo
+  const enemyRaw = mySide === 'one' ? teamTwo : teamOne
+
+  const toCard = async (
+    raw: { championId?: number; puuid?: string; summonerName?: string },
+    team: TeamSide,
+    index: number,
+  ): Promise<PlayerCard> => {
+    let gameName = raw.summonerName || 'Joueur'
+    let tagLine = '???'
+    if (raw.puuid) {
+      const resolved =
+        (await lcuGet<{ gameName?: string; tagLine?: string }>(
+          params.lockfile,
+          `/lol-summoner/v1/summoners/puuid/${raw.puuid}`,
+        )) ||
+        (await lcuGet<{ gameName?: string; tagLine?: string }>(
+          params.lockfile,
+          `/lol-summoner/v2/summoners/puuid/${raw.puuid}`,
+        ))
+      if (resolved?.gameName) {
+        gameName = resolved.gameName
+        tagLine = resolved.tagLine || '???'
+      }
+    }
+    const champ = raw.championId ? await getChampionById(raw.championId) : null
+    return {
+      cellId: index,
+      team,
+      summonerName: `${gameName}#${tagLine}`,
+      gameName,
+      tagLine,
+      assignedPosition: '—',
+      championId: raw.championId ?? champ?.id ?? null,
+      championName: champ?.name ?? null,
+      championKey: champ?.key ?? null,
+      championImage: champ?.image ?? null,
+      isPickIntent: false,
+      locked: true,
+      championWinRate: champ?.winRate ?? null,
+      championTier: champ?.tier ?? null,
+      spell1Id: null,
+      spell2Id: null,
+      puuid: raw.puuid ?? null,
+      playerStats: null,
+      live: null,
+      links: buildProfileLinks(gameName, tagLine, region, 'lol'),
+    }
+  }
+
+  const allies = await Promise.all(allyRaw.map((p, i) => toCard(p, 'ally', i)))
+  const enemies = await Promise.all(enemyRaw.map((p, i) => toCard(p, 'enemy', i + 5)))
+
+  // Enrichir avec Live Client si dispo (KDA / items)
+  const liveState = await fetchInGameState(
+    params.currentSummoner?.gameName
+      ? `${params.currentSummoner.gameName}#${params.currentSummoner.tagLine || ''}`
+      : null,
+  )
+  if (liveState) {
+    const merge = (card: PlayerCard) => {
+      const live =
+        liveState.allies.find((x) => x.gameName.toLowerCase() === card.gameName.toLowerCase()) ||
+        liveState.enemies.find((x) => x.gameName.toLowerCase() === card.gameName.toLowerCase())
+      if (!live) return card
+      return {
+        ...card,
+        championName: live.championName || card.championName,
+        championImage: live.championImage || card.championImage,
+        championId: live.championId ?? card.championId,
+        championKey: live.championKey ?? card.championKey,
+        assignedPosition: live.position || card.assignedPosition,
+        live: {
+          level: live.level,
+          kills: live.kills,
+          deaths: live.deaths,
+          assists: live.assists,
+          cs: live.cs,
+          wardScore: live.wardScore,
+          isDead: live.isDead,
+          respawnTimer: live.respawnTimer,
+          combatScore: live.combatScore,
+          damageShare: live.damageShare,
+          goldEstimate: live.goldEstimate,
+          kdaRatio: live.kdaRatio,
+          keystone: live.keystone,
+          spell1: live.spell1,
+          spell2: live.spell2,
+          items: live.items,
+        },
+      }
+    }
+    for (let i = 0; i < allies.length; i++) allies[i] = merge(allies[i]!)
+    for (let i = 0; i < enemies.length; i++) enemies[i] = merge(enemies[i]!)
+  }
+
+  const localPlayerCellId =
+    allies.find((p) => p.gameName.toLowerCase() === (meName || ''))?.cellId ?? null
+
+  return {
+    connected: params.connected,
+    phase: params.phase,
+    demo: false,
+    mode: 'lol',
+    queueName: params.queueName || queueLabel(params.session.gameData?.queue?.id, params.session.gameData?.queue?.gameMode),
+    region,
+    localPlayerCellId,
+    timer: null,
+    bans: { ally: [], enemy: [] },
+    allies,
+    enemies,
+    players: [...allies, ...enemies],
+    teamWinChance: { ally: 50, enemy: 50 },
+    message: liveState
+      ? `EN PARTIE · Live Client OK · ${allies.length + enemies.length} joueurs`
+      : `EN PARTIE · scoreboard LCU (${allies.length + enemies.length} joueurs) — Live Client 2999 indisponible`,
+    inGame: {
+      active: true,
+      gameMode: liveState?.gameMode || params.session.gameData?.queue?.gameMode || 'CLASSIC',
+      gameTime: liveState?.gameTime ?? 0,
+      mapName: liveState?.mapName || params.session.map?.name || '',
+      events: liveState?.events ?? [],
+      teamTotals: liveState?.teamTotals ?? {
+        ally: { kills: 0, deaths: 0, assists: 0, cs: 0, combat: 0, gold: 0 },
+        enemy: { kills: 0, deaths: 0, assists: 0, cs: 0, combat: 0, gold: 0 },
+      },
     },
   }
 }

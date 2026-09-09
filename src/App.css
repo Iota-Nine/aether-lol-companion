@@ -234,6 +234,12 @@
   animation: hotPulse 1.6s ease-in-out infinite;
 }
 
+.live-badge.scout {
+  border-color: rgba(45, 212, 191, 0.55);
+  color: #99f6e4;
+  background: rgba(15, 118, 110, 0.22);
+}
+
 .live-badge.hot .live-dot {
   background: #fb7185;
   box-shadow: 0 0 12px #fb7185;
@@ -335,6 +341,13 @@
   border: 1px solid var(--line);
 }
 
+.guides-panel.scout-main {
+  max-width: 1280px;
+  margin-top: 8px;
+  border: 2px solid rgba(45, 212, 191, 0.4);
+  box-shadow: 0 0 28px rgba(45, 212, 191, 0.12);
+}
+
 .guides-head {
   display: flex;
   justify-content: space-between;
@@ -358,20 +371,132 @@
   font-size: 0.8rem;
 }
 
+.lane-dock {
+  width: calc(100% + 36px);
+  max-width: none;
+  margin: 0 -18px 14px;
+  padding: 12px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(90deg, #0f766e 0%, #0b1220 42%, #0b1220 58%, #9f1239 100%);
+  border-top: 2px solid #2dd4bf;
+  border-bottom: 2px solid #2dd4bf;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), inset 0 0 40px rgba(45, 212, 191, 0.12);
+  position: relative;
+  z-index: 80;
+}
+
+.lane-dock.is-sticky {
+  position: sticky;
+  top: 0;
+}
+
+.hud.desktop .lane-dock.is-sticky {
+  top: 36px;
+}
+
+.lane-dock-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.lane-dock-key {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.2em;
+  color: #99f6e4;
+}
+
+.lane-dock-copy strong {
+  font-family: var(--font-hud);
+  font-size: 1.05rem;
+  letter-spacing: 0.1em;
+  color: #f8fafc;
+}
+
+.lane-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.lane-btn {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  padding: 14px 20px;
+  border: 2px solid rgba(148, 163, 184, 0.45);
+  background: rgba(5, 8, 14, 0.92);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: 0.15s ease;
+  min-width: 108px;
+  min-height: 48px;
+}
+
+.lane-btn:hover {
+  border-color: #5eead4;
+  color: #fff;
+  transform: translateY(-1px);
+  background: rgba(15, 118, 110, 0.35);
+}
+
+.lane-btn.active {
+  color: #042f2e;
+  border-color: #99f6e4;
+  background: linear-gradient(145deg, #5eead4, #14b8a6);
+  box-shadow: 0 0 22px rgba(45, 212, 191, 0.55);
+  font-weight: 700;
+}
+
+.lane-switch-inline {
+  margin-bottom: 12px;
+}
+
+.lane-meta-note {
+  margin: 0 0 10px;
+  font-family: var(--font-hud);
+  font-size: 0.82rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.lane-meta-error {
+  margin: 0 0 10px;
+  color: var(--bad);
+  font-size: 0.85rem;
+}
+
 .guides-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+.guides-list.is-loading {
+  opacity: 0.55;
+}
+
 .guide-card {
   display: grid;
-  grid-template-columns: 180px 90px 1fr;
+  grid-template-columns: 36px 180px 90px 1fr;
   gap: 12px;
   align-items: start;
   padding: 10px;
   background: rgba(5, 8, 14, 0.55);
   border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.guide-rank {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  padding-top: 10px;
 }
 
 .guide-champ {
