@@ -79,7 +79,7 @@ jobs:
 
           gh release upload $tag @uploads --clobber
 
-          $names = gh api "repos/Iota-Nine/aether-lol-companion/releases/tags/$tag" --jq ".assets[].name"
-          Write-Host "Assets:`n$names"
-          if ($names -notmatch "AETHER-Setup-$ver.exe") { throw "Setup missing on release" }
-          if ($names -notmatch "latest.yml") { throw "latest.yml missing on release" }
+          $names = @(gh api "repos/Iota-Nine/aether-lol-companion/releases/tags/$tag" --jq ".assets[].name")
+          Write-Host "Assets:`n$($names -join "`n")"
+          if ($names -notcontains "AETHER-Setup-$ver.exe") { throw "Setup missing on release" }
+          if ($names -notcontains "latest.yml") { throw "latest.yml missing on release" }
