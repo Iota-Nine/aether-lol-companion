@@ -848,6 +848,11 @@
   letter-spacing: 0.08em;
 }
 
+.rank-chip.account-chip {
+  color: #99f6e4;
+  border-color: rgba(45, 212, 191, 0.45);
+}
+
 .hud.mode-tft .bg-glow.right {
   background: rgba(232, 121, 249, 0.22);
 }

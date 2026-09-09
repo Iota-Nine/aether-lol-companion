@@ -106,6 +106,9 @@ interface AllGameData {
     riotId?: string
     riotIdGameName?: string
     riotIdTagLine?: string
+    fullRunes?: {
+      keystone?: { displayName?: string; id?: number }
+    }
   }
   allPlayers?: RawLivePlayer[]
   events?: { Events?: Array<{ EventID?: number; EventName?: string; EventTime?: number; KillerName?: string; VictimName?: string; Assisters?: string[]; DragonType?: string }> }
@@ -115,6 +118,29 @@ interface AllGameData {
     mapName?: string
     mapNumber?: number
   }
+}
+
+/** Anciennes masteries / perks obsolètes parfois renvoyées à tort par le Live Client */
+const DEPRECATED_KEYSTONES = new Set([
+  'toucher de feu mortel',
+  'deathfire touch',
+  'tonnerre',
+  'thunderlord',
+  "tonnerre d'orage",
+  'thunderlord\'s decree',
+  'ferveur de la guerre',
+  'fervor of battle',
+  'esprit sagace',
+  'stormraider\'s surge',
+  'tempête du voyageur',
+])
+
+function sanitizeKeystone(name: string | null | undefined): string | null {
+  if (!name) return null
+  const n = name.trim()
+  if (!n) return null
+  if (DEPRECATED_KEYSTONES.has(n.toLowerCase())) return null
+  return n
 }
 
 function parseRiot(p: RawLivePlayer) {
@@ -250,6 +276,13 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
     const level = p.level ?? 1
     const kdaRatio = deaths === 0 ? kills + assists : Number(((kills + assists) / deaths).toFixed(2))
     const champ = await champInfo(p.championName || '')
+    const isMe =
+      id.gameName.toLowerCase() === meName.toLowerCase() ||
+      p.summonerName?.toLowerCase() === meName.toLowerCase()
+    const keystoneRaw =
+      (isMe ? data.activePlayer?.fullRunes?.keystone?.displayName : null) ||
+      p.runes?.keystone?.displayName ||
+      null
 
     mapped.push({
       cellId: i,
@@ -277,7 +310,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       damageShare: 0,
       goldEstimate: Math.round(goldEstimate),
       kdaRatio,
-      keystone: p.runes?.keystone?.displayName ?? null,
+      keystone: sanitizeKeystone(keystoneRaw),
       spell1: p.summonerSpells?.summonerSpellOne?.displayName ?? null,
       spell2: p.summonerSpells?.summonerSpellTwo?.displayName ?? null,
     })
@@ -289,10 +322,15 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
 
   const allies = mapped.filter((p) => p.team === 'ally')
   const enemies = mapped.filter((p) => p.team === 'enemy')
+  const solo = enemies.length === 0
   const allyCombat = allies.reduce((s, p) => s + p.combatScore, 0) || 1
   const enemyCombat = enemies.reduce((s, p) => s + p.combatScore, 0) || 1
-  for (const p of allies) p.damageShare = Number(((p.combatScore / allyCombat) * 100).toFixed(1))
-  for (const p of enemies) p.damageShare = Number(((p.combatScore / enemyCombat) * 100).toFixed(1))
+  for (const p of allies) {
+    p.damageShare = solo ? 0 : Number(((p.combatScore / allyCombat) * 100).toFixed(1))
+  }
+  for (const p of enemies) {
+    p.damageShare = Number(((p.combatScore / enemyCombat) * 100).toFixed(1))
+  }
 
   const sum = (list: InGamePlayerLive[]) => ({
     kills: list.reduce((s, p) => s + p.kills, 0),
@@ -390,7 +428,7 @@ async function fetchInGameStateFromPlayers(
       damageShare: 0,
       goldEstimate,
       kdaRatio: deaths === 0 ? kills + assists : Number(((kills + assists) / deaths).toFixed(2)),
-      keystone: p.runes?.keystone?.displayName ?? null,
+      keystone: sanitizeKeystone(p.runes?.keystone?.displayName),
       spell1: p.summonerSpells?.summonerSpellOne?.displayName ?? null,
       spell2: p.summonerSpells?.summonerSpellTwo?.displayName ?? null,
     })
@@ -398,9 +436,10 @@ async function fetchInGameStateFromPlayers(
   for (const p of mapped) p.combatScore = combatScore(p)
   const allies = mapped.filter((p) => p.team === 'ally')
   const enemies = mapped.filter((p) => p.team === 'enemy')
+  const solo = enemies.length === 0
   const allyCombat = allies.reduce((s, p) => s + p.combatScore, 0) || 1
   const enemyCombat = enemies.reduce((s, p) => s + p.combatScore, 0) || 1
-  for (const p of allies) p.damageShare = Number(((p.combatScore / allyCombat) * 100).toFixed(1))
+  for (const p of allies) p.damageShare = solo ? 0 : Number(((p.combatScore / allyCombat) * 100).toFixed(1))
   for (const p of enemies) p.damageShare = Number(((p.combatScore / enemyCombat) * 100).toFixed(1))
   const sum = (list: InGamePlayerLive[]) => ({
     kills: list.reduce((s, p) => s + p.kills, 0),
@@ -502,9 +541,16 @@ export async function buildLolInGameSession(params: {
   }
   const a = form(allies)
   const e = form(enemies)
-  const allyPower = Math.pow(Math.max(a, 1) / 50, 1.25)
-  const enemyPower = Math.pow(Math.max(e, 1) / 50, 1.25)
-  const allyChance = Number(((allyPower / (allyPower + enemyPower)) * 100).toFixed(1))
+  const solo = enemies.length === 0
+  const practice = /PRACTICE/i.test(ingame.gameMode || '')
+  let allyChance: number
+  if (solo) {
+    allyChance = 100
+  } else {
+    const allyPower = Math.pow(Math.max(a, 1) / 50, 1.25)
+    const enemyPower = Math.pow(Math.max(e, 1) / 50, 1.25)
+    allyChance = Number(((allyPower / (allyPower + enemyPower)) * 100).toFixed(1))
+  }
 
   const mm = Math.floor(ingame.gameTime / 60)
   const ss = String(ingame.gameTime % 60).padStart(2, '0')
@@ -526,8 +572,13 @@ export async function buildLolInGameSession(params: {
     allies,
     enemies,
     players: [...allies, ...enemies],
-    teamWinChance: { ally: allyChance, enemy: Number((100 - allyChance).toFixed(1)) },
-    message: `EN PARTIE · ${mm}:${ss} · KDA ${ingame.teamTotals.ally.kills}/${ingame.teamTotals.ally.deaths}/${ingame.teamTotals.ally.assists} vs ${ingame.teamTotals.enemy.kills}/${ingame.teamTotals.enemy.deaths}/${ingame.teamTotals.enemy.assists}`,
+    teamWinChance: {
+      ally: allyChance,
+      enemy: solo ? 0 : Number((100 - allyChance).toFixed(1)),
+    },
+    message: solo
+      ? `EN PARTIE · ${mm}:${ss} · ${practice ? 'OUTIL D’ENTRAÎNEMENT (solo)' : 'SOLO / CUSTOM'} — pas d’ennemis`
+      : `EN PARTIE · ${mm}:${ss} · KDA ${ingame.teamTotals.ally.kills}/${ingame.teamTotals.ally.deaths}/${ingame.teamTotals.ally.assists} vs ${ingame.teamTotals.enemy.kills}/${ingame.teamTotals.enemy.deaths}/${ingame.teamTotals.enemy.assists}`,
     inGame: {
       active: true,
       gameMode: ingame.gameMode,

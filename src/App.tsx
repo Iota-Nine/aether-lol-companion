@@ -48,21 +48,25 @@ function PlayerSlot({
   index,
   tft,
   inGame,
+  soloLive,
 }: {
   player: PlayerCard
   isYou: boolean
   index: number
   tft?: boolean
   inGame?: boolean
+  soloLive?: boolean
 }) {
   const live = player.live
   const stats = player.playerStats
-  const playerWr = tft
+  const accountWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
     : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  // Priorité aux stats LCU joueur ; sinon WR champion OP.GG
-  const displayWr = playerWr ?? (inGame || live ? null : player.championWinRate)
-  const wrIsOpgg = playerWr == null && displayWr != null && displayWr > 0
+  // En partie : anneau = forme COMPTE (pas le WR du champion joué)
+  // Hors live : priorité stats joueur, sinon meta OP.GG du champ
+  const displayWr = accountWr ?? (inGame || live ? null : player.championWinRate)
+  const wrIsOpgg = accountWr == null && displayWr != null && displayWr > 0
+  const wrLabel = wrIsOpgg ? 'OP.GG' : accountWr != null ? 'COMPTE' : 'WR'
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
 
@@ -148,12 +152,12 @@ function PlayerSlot({
             <div className="dmg-row">
               <div className="dmg-meta">
                 <span>PART COMBAT</span>
-                <strong>{live.damageShare}%</strong>
+                <strong>{soloLive ? '—' : `${live.damageShare}%`}</strong>
               </div>
               <div className="dmg-track">
                 <div
                   className={`dmg-fill ${player.team}`}
-                  style={{ width: `${Math.min(100, live.damageShare)}%` }}
+                  style={{ width: soloLive ? '0%' : `${Math.min(100, live.damageShare)}%` }}
                 />
               </div>
             </div>
@@ -181,6 +185,7 @@ function PlayerSlot({
 
         {stats && (
           <div className="player-form">
+            <span className="rank-chip account-chip">STATS COMPTE</span>
             {stats.tier && (
               <span className="rank-chip">
                 {stats.tier} {stats.division}
@@ -212,9 +217,7 @@ function PlayerSlot({
           }
         >
           <strong>{displayWr != null ? displayWr.toFixed(1) : '—'}</strong>
-          <span>
-            {wrIsOpgg ? 'OP.GG' : live || tft ? 'FORM' : 'WR'}
-          </span>
+          <span>{wrLabel}</span>
         </div>
       </div>
     </article>
@@ -231,6 +234,7 @@ function TeamPanel({
   hideChance,
   tft,
   inGame,
+  soloLive,
 }: {
   title: string
   subtitle: string
@@ -241,6 +245,7 @@ function TeamPanel({
   hideChance?: boolean
   tft?: boolean
   inGame?: boolean
+  soloLive?: boolean
 }) {
   return (
     <section className={`team-panel ${side} ${tft ? 'tft-panel' : ''} ${inGame ? 'ingame-panel' : ''}`}>
@@ -268,13 +273,15 @@ function TeamPanel({
         {players.length === 0 ? (
           <div className="empty-state">
             <div className="radar" />
-            <p>Scan en cours…</p>
+            <p>{soloLive && side === 'enemy' ? 'SOLO / PRACTICE' : 'Scan en cours…'}</p>
             <span>
               {tft
                 ? 'Aucun joueur TFT détecté — ouvre un lobby TFT'
-                : inGame
-                  ? 'Live Client 2999 indisponible — la partie doit être chargée'
-                  : 'Aucun joueur détecté en champion select'}
+                : soloLive && side === 'enemy'
+                  ? 'Aucun ennemi — outil d’entraînement ou custom solo'
+                  : inGame
+                    ? 'Live Client 2999 indisponible — la partie doit être chargée'
+                    : 'Aucun joueur détecté en champion select'}
             </span>
           </div>
         ) : (
@@ -286,6 +293,7 @@ function TeamPanel({
               index={i}
               tft={tft}
               inGame={inGame}
+              soloLive={soloLive}
             />
           ))
         )}
@@ -690,6 +698,8 @@ export default function App() {
   // Mode scout : meta OP.GG sans League / hors draft / hors partie
   const isScoutMode = showLolLanes && !isInGame && !inChampSelect
   const showDraftHud = showLolLanes && (isInGame || inChampSelect)
+  const isSoloLive = isInGame && (live?.enemies?.length ?? 0) === 0
+  const isPractice = /PRACTICE/i.test(live?.inGame?.gameMode || live?.queueName || '')
 
   const clockLabel = useMemo(
     () =>
@@ -965,9 +975,13 @@ export default function App() {
                 </div>
               </div>
               <p className="vs-caption">
-                {isInGame
-                  ? 'WIN% LIVE · RANKED + COMBAT EN PARTIE · FLUX CONTINU'
-                  : 'TEAM WIN% · RANKED + HISTORIQUE RÉCENT'}
+                {isSoloLive
+                  ? isPractice
+                    ? 'OUTIL D’ENTRAÎNEMENT · PAS D’ÉQUIPE ENNEMIE'
+                    : 'SOLO / CUSTOM · PAS D’ÉQUIPE ENNEMIE'
+                  : isInGame
+                    ? 'WIN% LIVE · RANKED COMPTE + COMBAT EN PARTIE'
+                    : 'TEAM WIN% · RANKED COMPTE + HISTORIQUE RÉCENT'}
               </p>
             </div>
 
@@ -1000,15 +1014,18 @@ export default function App() {
               localPlayerCellId={live.localPlayerCellId}
               side="ally"
               inGame={isInGame}
+              soloLive={isSoloLive}
             />
             <TeamPanel
               title={isInGame ? 'ENEMIES' : 'RED SIDE'}
-              subtitle={isInGame ? 'SCOREBOARD LIVE' : 'ÉQUIPE ENNEMIE'}
+              subtitle={isInGame ? (isSoloLive ? 'AUCUN ENNEMI' : 'SCOREBOARD LIVE') : 'ÉQUIPE ENNEMIE'}
               players={live.enemies}
               winChance={live.teamWinChance.enemy}
               localPlayerCellId={null}
               side="enemy"
               inGame={isInGame}
+              soloLive={isSoloLive}
+              hideChance={isSoloLive}
             />
           </main>
 
