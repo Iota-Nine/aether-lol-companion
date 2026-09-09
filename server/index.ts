@@ -332,6 +332,7 @@ export function createApp() {
           message: 'Champion select LoL détecté — alliés, ennemis et picks synchronisés.',
           session: champSelect,
           currentSummoner,
+          lockfile,
         })
         res.json(await withGuides(live, lockfile))
         return

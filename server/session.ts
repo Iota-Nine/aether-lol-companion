@@ -1,7 +1,7 @@
-import type { LiveSession, PlayerCard, TeamSide } from './types.js'
-// LiveSession used for ban mapping return types
+import type { LiveSession, PlayerCard, TeamSide, LockfileData } from './types.js'
 import { getChampionById, estimateTeamWinChance } from './champions.js'
 import { buildProfileLinks, normalizeRegion } from './profiles.js'
+import { lcuGet } from './lcu.js'
 
 interface LcuChampSelectSession {
   localPlayerCellId: number
@@ -77,13 +77,49 @@ function positionLabel(pos?: string): string {
   return map[pos.toLowerCase()] ?? pos
 }
 
+async function resolveIdentity(
+  player: LcuPlayer,
+  lockfile?: LockfileData | null,
+): Promise<{ gameName: string; tagLine: string; display: string; puuid: string | null }> {
+  let identity = parseRiotId(player)
+  let puuid = player.puuid ?? null
+
+  const needsResolve =
+    identity.tagLine === '???' ||
+    identity.gameName.startsWith('Joueur') ||
+    identity.gameName.startsWith('Invocateur')
+
+  if (lockfile && needsResolve) {
+    let resolved: LcuSummoner | null = null
+    if (player.puuid) {
+      resolved =
+        (await lcuGet<LcuSummoner>(lockfile, `/lol-summoner/v1/summoners/puuid/${player.puuid}`)) ||
+        (await lcuGet<LcuSummoner>(lockfile, `/lol-summoner/v2/summoners/puuid/${player.puuid}`))
+    }
+    if (!resolved?.gameName && player.summonerId) {
+      resolved = await lcuGet<LcuSummoner>(lockfile, `/lol-summoner/v1/summoners/${player.summonerId}`)
+    }
+    if (resolved?.gameName) {
+      identity = {
+        gameName: resolved.gameName,
+        tagLine: resolved.tagLine || 'EUW',
+        display: `${resolved.gameName}#${resolved.tagLine || 'EUW'}`,
+      }
+      puuid = resolved.puuid || puuid
+    }
+  }
+
+  return { ...identity, puuid }
+}
+
 async function toPlayerCard(
   player: LcuPlayer,
   team: TeamSide,
   region: string,
   actions: LcuAction[],
+  lockfile?: LockfileData | null,
 ): Promise<PlayerCard> {
-  const identity = parseRiotId(player)
+  const identity = await resolveIdentity(player, lockfile)
   const pickAction = actions.find((a) => a.actorCellId === player.cellId && a.type === 'pick')
   const championId =
     player.championId && player.championId > 0
@@ -118,7 +154,7 @@ async function toPlayerCard(
     championTier: champ?.tier ?? null,
     spell1Id: player.spell1Id ?? null,
     spell2Id: player.spell2Id ?? null,
-    puuid: player.puuid ?? null,
+    puuid: identity.puuid,
     links: buildProfileLinks(identity.gameName, identity.tagLine, region),
   }
 }
@@ -131,6 +167,7 @@ export async function buildLiveSession(params: {
   message: string
   session: LcuChampSelectSession | null
   currentSummoner?: LcuSummoner | null
+  lockfile?: LockfileData | null
 }): Promise<LiveSession> {
   const region = normalizeRegion(params.region)
   const session = params.session
@@ -156,10 +193,10 @@ export async function buildLiveSession(params: {
 
   const flatActions = (session.actions ?? []).flat()
   const allies = await Promise.all(
-    (session.myTeam ?? []).map((p) => toPlayerCard(p, 'ally', region, flatActions)),
+    (session.myTeam ?? []).map((p) => toPlayerCard(p, 'ally', region, flatActions, params.lockfile)),
   )
   const enemies = await Promise.all(
-    (session.theirTeam ?? []).map((p) => toPlayerCard(p, 'enemy', region, flatActions)),
+    (session.theirTeam ?? []).map((p) => toPlayerCard(p, 'enemy', region, flatActions, params.lockfile)),
   )
 
   // Enrich local player name if missing

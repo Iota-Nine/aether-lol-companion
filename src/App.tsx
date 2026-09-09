@@ -59,14 +59,13 @@ function PlayerSlot({
 }) {
   const live = player.live
   const stats = player.playerStats
+  // Anneau = meta OP.GG du CHAMPION affiché (pas ton WR ranked compte)
+  const champMetaWr = player.championWinRate
   const accountWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
     : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  // En partie : anneau = forme COMPTE (pas le WR du champion joué)
-  // Hors live : priorité stats joueur, sinon meta OP.GG du champ
-  const displayWr = accountWr ?? (inGame || live ? null : player.championWinRate)
-  const wrIsOpgg = accountWr == null && displayWr != null && displayWr > 0
-  const wrLabel = wrIsOpgg ? 'OP.GG' : accountWr != null ? 'COMPTE' : 'WR'
+  const displayWr = champMetaWr ?? (live || inGame ? null : accountWr)
+  const wrLabel = champMetaWr != null ? 'OP.GG' : accountWr != null ? 'COMPTE' : 'WR'
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
 
@@ -185,7 +184,7 @@ function PlayerSlot({
 
         {stats && (
           <div className="player-form">
-            <span className="rank-chip account-chip">STATS COMPTE</span>
+            <span className="rank-chip account-chip">COMPTE ≠ CHAMP</span>
             {stats.tier && (
               <span className="rank-chip">
                 {stats.tier} {stats.division}
@@ -194,16 +193,21 @@ function PlayerSlot({
             )}
             {stats.rankedWR != null && (
               <span>
-                Ranked {stats.rankedWR}% ({stats.wins}W {stats.losses}L)
+                Ranked compte {stats.rankedWR}% ({stats.wins}W {stats.losses}L)
               </span>
             )}
             {tft && stats.top4Rate != null && <span>Top4 {stats.top4Rate}%</span>}
             {!tft && stats.recentWR != null && (
               <span>
-                Recent {stats.recentWR}% /{stats.recentGames}
+                Recent compte {stats.recentWR}% /{stats.recentGames}
               </span>
             )}
           </div>
+        )}
+        {player.championName && champMetaWr != null && (
+          <p className="champ-meta-hint">
+            Meta {player.championName} · {champMetaWr.toFixed(1)}% WR OP.GG (pas ton historique perso)
+          </p>
         )}
       </div>
 

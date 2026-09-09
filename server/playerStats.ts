@@ -183,7 +183,7 @@ export async function enrichPlayersWithStats(
       const i = cursor++
       if (i >= players.length) return
       const p = players[i]!
-      if (!p.puuid || p.tagLine === '???' || p.gameName === 'Joueur') {
+      if (!p.puuid) {
         results[i] = p
         continue
       }
