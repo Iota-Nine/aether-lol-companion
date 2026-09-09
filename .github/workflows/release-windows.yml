@@ -28,7 +28,24 @@ jobs:
       - name: Build UI + server
         run: npm run build
 
-      - name: Publish Windows artifacts
+      - name: Publish Windows Setup (NSIS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --publish always
+        run: npx electron-builder --win nsis --publish always
+
+      - name: Build Portable (no publish race)
+        run: npx electron-builder --win portable --publish never
+
+      - name: Upload Portable to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $ver = (Get-Content package.json | ConvertFrom-Json).version
+          $portable = Get-ChildItem "release/AETHER-Portable-$ver.exe" -ErrorAction SilentlyContinue
+          if (-not $portable) { $portable = Get-ChildItem release/AETHER-Portable-*.exe | Select-Object -First 1 }
+          if ($portable) {
+            gh release upload "v$ver" $portable.FullName --clobber
+          } else {
+            Write-Host "Portable introuvable — skip"
+          }
