@@ -31,6 +31,7 @@ jobs:
       - name: Publish Windows Setup (NSIS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: "false"
         run: npx electron-builder --win nsis --publish always
 
       - name: Build Portable (no publish race)
