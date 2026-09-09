@@ -696,8 +696,7 @@ export default function App() {
   const showUpdateBanner =
     update &&
     update.status !== 'idle' &&
-    update.status !== 'up-to-date' &&
-    update.status !== 'disabled'
+    update.status !== 'up-to-date'
 
   return (
     <div

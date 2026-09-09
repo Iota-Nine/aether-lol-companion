@@ -115,7 +115,8 @@ function setupAutoUpdater(win) {
 
   if (!app.isPackaged) {
     state.status = 'disabled'
-    state.message = 'Auto-update actif uniquement sur AETHER-Setup (version installée).'
+    state.message =
+      'Auto-update OFF (mode dev). Installe AETHER-Setup depuis GitHub Releases pour recevoir les MAJ.'
     emitState()
     return
   }
