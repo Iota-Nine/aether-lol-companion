@@ -21,6 +21,7 @@ import type { LiveSession } from './types.js'
 import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
 import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
+import { buildProfileHome, buildMatchDebrief, buildLatestDebrief } from './history.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
   try {
@@ -145,6 +146,68 @@ export function createApp() {
       const limit = Math.min(10, Math.max(1, Number(req.query.limit) || 7))
       const guides = await buildLaneMetaGuides(laneRaw as 'top' | 'jungle' | 'mid' | 'adc' | 'support', limit)
       res.json(guides)
+    } catch (error) {
+      res.status(500).json({ error: String(error) })
+    }
+  })
+
+  app.get('/api/profile', async (_req, res) => {
+    try {
+      const lockfile = findLockfile()
+      if (!lockfile) {
+        res.json({ connected: false, matches: [] })
+        return
+      }
+      await loadChampions()
+      const profile = await buildProfileHome(lockfile)
+      if (!profile) {
+        res.json({ connected: false, matches: [] })
+        return
+      }
+      res.json(profile)
+    } catch (error) {
+      res.status(500).json({ error: String(error) })
+    }
+  })
+
+  app.get('/api/match/:gameId/debrief', async (req, res) => {
+    try {
+      const lockfile = findLockfile()
+      if (!lockfile) {
+        res.status(503).json({ error: 'League non connecté' })
+        return
+      }
+      const gameId = Number(req.params.gameId)
+      if (!Number.isFinite(gameId)) {
+        res.status(400).json({ error: 'gameId invalide' })
+        return
+      }
+      await loadChampions()
+      const debrief = await buildMatchDebrief(lockfile, gameId)
+      if (!debrief) {
+        res.status(404).json({ error: 'Match introuvable' })
+        return
+      }
+      res.json(debrief)
+    } catch (error) {
+      res.status(500).json({ error: String(error) })
+    }
+  })
+
+  app.get('/api/debrief/latest', async (_req, res) => {
+    try {
+      const lockfile = findLockfile()
+      if (!lockfile) {
+        res.status(503).json({ error: 'League non connecté' })
+        return
+      }
+      await loadChampions()
+      const debrief = await buildLatestDebrief(lockfile)
+      if (!debrief) {
+        res.status(404).json({ error: 'Aucun debrief' })
+        return
+      }
+      res.json(debrief)
     } catch (error) {
       res.status(500).json({ error: String(error) })
     }

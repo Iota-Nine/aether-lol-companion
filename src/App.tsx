@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'r
 import { fetchLive, fetchLaneMeta } from './api'
 import type { LiveSession, LolBuildGuide, MetaGuides, PlayerCard, TftCompGuide } from './types'
 import type { UpdateState } from './desktop'
+import { HomeBoard } from './HomeBoard'
 import './App.css'
 
 function wrTone(wr: number | null): 'good' | 'mid' | 'bad' | 'neutral' {
@@ -468,11 +469,13 @@ function LolBuildsPanel({
   onLaneChange,
   fallbackBuilds,
   scout,
+  secondary,
 }: {
   lane: LaneId
   onLaneChange: (lane: LaneId) => void
   fallbackBuilds?: LolBuildGuide[]
   scout?: boolean
+  secondary?: boolean
 }) {
   const [meta, setMeta] = useState<MetaGuides | null>(null)
   const [loading, setLoading] = useState(false)
@@ -500,10 +503,15 @@ function LolBuildsPanel({
   const builds = meta?.lolBuilds?.length ? meta.lolBuilds : fallbackBuilds ?? []
 
   return (
-    <section className={`guides-panel lol-guides ${scout ? 'scout-main' : ''}`} id="meta-opgg">
+    <section
+      className={`guides-panel lol-guides ${scout && !secondary ? 'scout-main' : ''} ${secondary ? 'meta-secondary' : ''}`}
+      id="meta-opgg"
+    >
       <header className="guides-head">
         <div>
-          <p className="panel-kicker">{scout ? 'META SCOUT · SANS LEAGUE' : 'META OP.GG'}</p>
+          <p className="panel-kicker">
+            {secondary ? 'META OP.GG · SECONDAIRE' : scout ? 'META SCOUT · SANS LEAGUE' : 'META OP.GG'}
+          </p>
           <h2>TOP 7 · {lane.toUpperCase()}</h2>
         </div>
         <span className="guides-count">{loading ? '…' : `${builds.length} champs`}</span>
@@ -704,6 +712,13 @@ export default function App() {
   const showDraftHud = showLolLanes && (isInGame || inChampSelect)
   const isSoloLive = isInGame && (live?.enemies?.length ?? 0) === 0
   const isPractice = /PRACTICE/i.test(live?.inGame?.gameMode || live?.queueName || '')
+  const isEndOfGame =
+    showLolLanes &&
+    !isInGame &&
+    !inChampSelect &&
+    ['EndOfGame', 'WaitingForStats', 'PreEndOfGame', 'TerminatedInError'].includes(phase)
+  const showHome = isScoutMode && Boolean(live?.connected) && !isTft
+  const showOfflineScout = isScoutMode && !live?.connected
 
   const clockLabel = useMemo(
     () =>
@@ -767,7 +782,9 @@ export default function App() {
                 : isTft
                   ? 'TFT Companion Desktop'
                   : isScoutMode
-                    ? 'Meta OP.GG · sans League'
+                    ? live?.connected
+                      ? 'Profil · historique · debrief'
+                      : 'Meta OP.GG · sans League'
                     : 'LoL Companion Desktop'}
             </span>
           </div>
@@ -826,9 +843,11 @@ export default function App() {
             <p className="brand-eyebrow">
               {isInGame
                 ? 'NEURAL OVERLAY · REALTIME'
-                : isScoutMode
-                  ? 'META SCOUT · SANS CLIENT'
-                  : 'COMPANION SYSTEM'}
+                : showHome
+                  ? 'HOME · PROFIL + HISTORIQUE'
+                  : isScoutMode
+                    ? 'META SCOUT · SANS CLIENT'
+                    : 'COMPANION SYSTEM'}
             </p>
             <h1>AETHER</h1>
           </div>
@@ -875,9 +894,9 @@ export default function App() {
         </div>
 
         <div className="command-actions">
-          <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''}`}>
+          <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''} ${showHome ? 'home' : ''}`}>
             <i className="live-dot" />
-            {isInGame ? 'STREAM 0.8s' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
+            {isInGame ? 'STREAM 0.8s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
             <em>#{tick}</em>
           </div>
           <button type="button" className="icon-btn" onClick={() => void refresh()} title="Rafraîchir">
@@ -893,7 +912,15 @@ export default function App() {
       <section className="status-strip">
         <div className="status-message">
           <span className="status-key">
-            {isInGame ? 'LIVE FEED' : isScoutMode ? 'META SCOUT' : 'STATUS'}
+            {isInGame
+              ? 'LIVE FEED'
+              : isEndOfGame
+                ? 'DEBRIEF'
+                : showHome
+                  ? 'HOME'
+                  : isScoutMode
+                    ? 'META SCOUT'
+                    : 'STATUS'}
           </span>
           <p>
             {live?.message ??
@@ -901,19 +928,25 @@ export default function App() {
           </p>
         </div>
         <div className="status-feed">
-          <span>{isScoutMode ? 'SANS CLIENT OK' : 'LCU READ-ONLY'}</span>
+          <span>{showOfflineScout ? 'SANS CLIENT OK' : 'LCU READ-ONLY'}</span>
           <span>
             {isInGame
               ? 'LIVE CLIENT · KDA / CS / OR / EVENTS'
-              : isScoutMode
-                ? 'TOP 7 OP.GG PAR LANE'
-                : 'DATA LCU · RANKED + HISTORIQUE'}
+              : showHome
+                ? 'PROFIL · HISTORIQUE · DEBRIEF'
+                : isScoutMode
+                  ? 'TOP 7 OP.GG PAR LANE'
+                  : 'DATA LCU · RANKED + HISTORIQUE'}
           </span>
           <span>FAIR-PLAY MODE</span>
         </div>
       </section>
 
       {error && <div className="alert-banner">{error}</div>}
+
+      {isScoutMode && (
+        <HomeBoard connected={Boolean(live?.connected)} forceLatestDebrief={isEndOfGame} />
+      )}
 
       {live && isTft && (
         <>
@@ -1039,13 +1072,14 @@ export default function App() {
         </>
       )}
 
-      {/* Meta OP.GG = contenu principal hors TFT (avec ou sans League) */}
+      {/* Meta OP.GG : principale hors compte, secondaire si profil connecté */}
       {showLolLanes && (
         <LolBuildsPanel
           lane={metaLane}
           onLaneChange={setMetaLane}
           fallbackBuilds={live?.guides?.lolBuilds ?? []}
           scout={isScoutMode}
+          secondary={showHome}
         />
       )}
 
@@ -1054,8 +1088,8 @@ export default function App() {
       )}
 
       <footer className="hud-footer">
-        <span>AETHER HUD v1.4 · META SCOUT</span>
-        <span>Fonctionne sans League · live auto au draft</span>
+        <span>AETHER HUD v1.5 · HOME + DEBRIEF</span>
+        <span>Profil LCU · historique · meta OP.GG</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>

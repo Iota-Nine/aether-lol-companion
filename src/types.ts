@@ -150,3 +150,80 @@ export interface ChampionInfo {
   banRate: number
   tier: string
 }
+
+export interface MatchSummary {
+  gameId: number
+  gameCreation: number
+  gameDuration: number
+  queueId: number
+  queueLabel: string
+  win: boolean
+  championId: number
+  championName: string
+  championImage: string | null
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  gold: number
+  role: string
+  items: number[]
+  spell1Id: number | null
+  spell2Id: number | null
+}
+
+export interface ProfileHome {
+  connected: boolean
+  gameName?: string
+  tagLine?: string
+  puuid?: string
+  profileIconId?: number
+  profileIconUrl?: string
+  summonerLevel?: number
+  stats?: {
+    rankedWR: number | null
+    recentWR: number | null
+    wins: number
+    losses: number
+    tier: string | null
+    division: string | null
+    lp: number | null
+    recentGames: number
+    formScore: number | null
+  } | null
+  matches: MatchSummary[]
+}
+
+export interface DebriefPlayer {
+  gameName: string
+  tagLine: string
+  team: 'ally' | 'enemy'
+  championId: number
+  championName: string
+  championImage: string | null
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  gold: number
+  damage: number
+  vision: number
+  items: number[]
+  win: boolean
+  isYou: boolean
+  grade: 'CARRY' | 'SOLID' | 'MEH' | 'INT' | 'FEED' | 'GHOST'
+  verdict: string
+  score: number
+}
+
+export interface MatchDebrief {
+  gameId: number
+  win: boolean
+  gameDuration: number
+  queueLabel: string
+  headline: string
+  why: string[]
+  players: DebriefPlayer[]
+  mvp: string | null
+  intFeed: string | null
+}
