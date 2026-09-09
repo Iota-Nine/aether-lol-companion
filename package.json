@@ -1,0 +1,104 @@
+{
+  "name": "aether-lol-companion",
+  "private": true,
+  "version": "1.0.0",
+  "description": "AETHER — Companion League of Legends desktop (LCU + OP.GG / Porofessor)",
+  "author": "AETHER",
+  "main": "electron/main.cjs",
+  "type": "module",
+  "scripts": {
+    "dev": "npm run app",
+    "app": "concurrently -k -n api,web,desktop -c cyan,magenta,yellow \"npm run dev:server\" \"npm run dev:web\" \"wait-on http-get://127.0.0.1:8787/api/health http-get://127.0.0.1:5173 && electron .\"",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:server": "tsx watch server/index.ts",
+    "web": "concurrently -k -n api,web -c cyan,magenta \"npm run dev:server\" \"npm run dev:web\"",
+    "build:ui": "vite build",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=cjs --outfile=dist-server/index.cjs --packages=bundle",
+    "build": "npm run build:ui && npm run build:server",
+    "build:app": "npm run build && electron-builder --win",
+    "publish:app": "node scripts/publish-app.mjs",
+    "preview": "vite preview",
+    "start": "tsx server/index.ts"
+  },
+  "build": {
+    "appId": "com.aether.lolcompanion",
+    "productName": "AETHER",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "ui"
+      },
+      {
+        "from": "dist-server",
+        "to": "dist-server"
+      }
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Iota-Nine",
+        "repo": "aether-lol-companion",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "electron/icon.png",
+      "artifactName": "AETHER-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AETHER-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "AETHER LoL Companion",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "electron-updater": "^6.8.9",
+    "express": "^5.2.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
+    "concurrently": "^10.0.5",
+    "electron": "^37.10.3",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.25.9",
+    "oxlint": "^1.79.0",
+    "tsx": "^4.23.13",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "wait-on": "^8.0.5"
+  }
+}

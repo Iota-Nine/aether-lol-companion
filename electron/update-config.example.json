@@ -1,0 +1,7 @@
+{
+  "provider": "github",
+  "owner": "Iota-Nine",
+  "repo": "aether-lol-companion",
+  "private": false,
+  "_comment": "Ou utilise provider generic + url: https://ton-serveur.com/updates/"
+}
