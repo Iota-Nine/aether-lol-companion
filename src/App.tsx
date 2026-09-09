@@ -65,14 +65,6 @@ function PlayerSlot({
   const wrIsEstimate = playerWr == null && displayWr != null
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
-  const scoutLinks = (
-    [
-      { label: tft ? 'OP.GG TFT' : 'OP.GG', href: player.links?.opgg },
-      { label: 'PORO', href: player.links?.porofessor },
-      { label: 'U.GG', href: player.links?.uigg },
-      ...(tft ? [{ label: 'LOLCHESS', href: player.links?.lolchess }] : []),
-    ] as { label: string; href?: string }[]
-  ).filter((l): l is { label: string; href: string } => Boolean(l.href))
 
   return (
     <article
@@ -204,22 +196,6 @@ function PlayerSlot({
                 Recent {stats.recentWR}% /{stats.recentGames}
               </span>
             )}
-          </div>
-        )}
-
-        {scoutLinks.length > 0 && (
-          <div className="slot-links">
-            {scoutLinks.map((link) => (
-              <a
-                key={link.label}
-                className="scout-link"
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {link.label}
-              </a>
-            ))}
           </div>
         )}
       </div>
@@ -465,14 +441,6 @@ function LolBuildsPanel({ builds }: { builds: LolBuildGuide[] }) {
                 <span className="item-chip boots">{b.boots}</span>
               </div>
               <p>{b.tips}</p>
-              <div className="slot-links guide-links">
-                <a className="scout-link" href={b.links.opgg} target="_blank" rel="noreferrer">
-                  OP.GG BUILD
-                </a>
-                <a className="scout-link" href={b.links.uigg} target="_blank" rel="noreferrer">
-                  U.GG BUILD
-                </a>
-              </div>
             </div>
           </article>
         ))}
