@@ -64,7 +64,15 @@ export interface DebriefPlayer {
   assists: number
   cs: number
   gold: number
+  /** Dégâts aux champions */
   damage: number
+  damageTurrets: number
+  damageObjectives: number
+  damageTaken: number
+  mitigated: number
+  heal: number
+  shield: number
+  cc: number
   vision: number
   items: number[]
   win: boolean
@@ -132,6 +140,13 @@ interface NormPart {
   cs: number
   gold: number
   damage: number
+  damageTurrets: number
+  damageObjectives: number
+  damageTaken: number
+  mitigated: number
+  heal: number
+  shield: number
+  cc: number
   vision: number
   items: number[]
   lane: string
@@ -139,6 +154,14 @@ interface NormPart {
   position: string
   gameName: string
   tagLine: string
+}
+
+function pickStat(stats: Record<string, unknown>, ...keys: string[]): number {
+  for (const k of keys) {
+    const n = asNum(stats[k])
+    if (n != null && n >= 0) return n
+  }
+  return 0
 }
 
 interface RawGame {
@@ -236,7 +259,32 @@ function normalizeParticipant(
       (asNum(stats.totalAllyJungleMinionsKilled) || 0) +
       (asNum(stats.totalEnemyJungleMinionsKilled) || 0),
     gold: asNum(stats.goldEarned) || 0,
-    damage: asNum(stats.totalDamageDealtToChampions) || 0,
+    damage: pickStat(stats, 'totalDamageDealtToChampions'),
+    damageTurrets: pickStat(
+      stats,
+      'damageDealtToTurrets',
+      'damageDealtToBuildings',
+      'totalDamageDealtToTurrets',
+    ),
+    damageObjectives: (() => {
+      const obj = pickStat(stats, 'damageDealtToObjectives')
+      const tur = pickStat(
+        stats,
+        'damageDealtToTurrets',
+        'damageDealtToBuildings',
+        'totalDamageDealtToTurrets',
+      )
+      // damageDealtToObjectives inclut souvent les tours → on isole le reste (drakes, baron, etc.)
+      return obj > tur ? obj - tur : obj
+    })(),
+    damageTaken: pickStat(stats, 'totalDamageTaken'),
+    mitigated: pickStat(stats, 'damageSelfMitigated'),
+    heal: Math.max(
+      pickStat(stats, 'totalHealsOnTeammates'),
+      pickStat(stats, 'totalHeal'),
+    ),
+    shield: pickStat(stats, 'totalDamageShieldedOnTeammates'),
+    cc: pickStat(stats, 'timeCCingOthers'),
     vision: asNum(stats.visionScore) || 0,
     items: itemsFrom(stats),
     lane: String(timeline.lane || raw.lane || raw.individualPosition || ''),
@@ -455,31 +503,89 @@ export async function fetchMatchSummaries(
   return out
 }
 
+function formatK(n: number): string {
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
+  return String(Math.round(n))
+}
+
 function computePlayerScore(p: {
   kills: number
   deaths: number
   assists: number
   gold: number
   damage: number
+  damageTurrets: number
+  damageObjectives: number
+  damageTaken: number
+  mitigated: number
+  heal: number
+  shield: number
+  cc: number
+  vision: number
   cs: number
+  role: string
   teamAvgGold: number
   teamAvgDmg: number
+  teamAvgTurret: number
+  teamAvgObj: number
+  teamAvgTaken: number
+  teamAvgUtility: number
   teamAvgDeaths: number
 }): number {
   const kda = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths
   const goldRatio = p.teamAvgGold > 0 ? p.gold / p.teamAvgGold : 1
   const dmgRatio = p.teamAvgDmg > 0 ? p.damage / p.teamAvgDmg : 1
+  const turretRatio = p.teamAvgTurret > 0 ? p.damageTurrets / p.teamAvgTurret : 1
+  const objRatio = p.teamAvgObj > 0 ? p.damageObjectives / p.teamAvgObj : 1
+  const tankRatio = p.teamAvgTaken > 0 ? (p.damageTaken + p.mitigated * 0.35) / p.teamAvgTaken : 1
+  const utility = p.heal + p.shield * 1.2 + p.cc * 80 + p.vision * 40
+  const utilRatio = p.teamAvgUtility > 0 ? utility / p.teamAvgUtility : 1
   const deathRatio = p.teamAvgDeaths > 0 ? p.deaths / p.teamAvgDeaths : 1
+  const role = p.role
 
-  let score = 50
-  score += Math.min(28, kda * 5.5)
-  score += (goldRatio - 1) * 18
-  score += (dmgRatio - 1) * 16
-  score -= (deathRatio - 1) * 14
-  // Pénalité morte nette: un 8/7 ne doit pas passer pour un carry face à un 10/3
+  // Poids selon le rôle (supporte = utilité, adc = dmg, etc.)
+  let wKda = 5.2
+  let wDmg = 22
+  let wTurret = 10
+  let wObj = 8
+  let wTank = 4
+  let wUtil = 6
+  let wGold = 14
+  if (role === 'ADC' || role === 'MID') {
+    wDmg = 28
+    wTurret = 12
+    wUtil = 3
+    wTank = 2
+  } else if (role === 'TOP') {
+    wDmg = 18
+    wTank = 14
+    wTurret = 10
+  } else if (role === 'JGL') {
+    wObj = 16
+    wDmg = 20
+    wTurret = 6
+  } else if (role === 'SUP') {
+    wDmg = 10
+    wUtil = 22
+    wTank = 8
+    wGold = 6
+    wKda = 6
+  }
+
+  let score = 48
+  score += Math.min(26, kda * wKda)
+  score += (goldRatio - 1) * wGold
+  score += (dmgRatio - 1) * wDmg
+  score += (turretRatio - 1) * wTurret
+  score += (objRatio - 1) * wObj
+  score += (tankRatio - 1) * wTank
+  score += (utilRatio - 1) * wUtil
+  score -= (deathRatio - 1) * 13
   score -= Math.max(0, p.deaths - 4) * 2.2
   if (p.deaths >= 8 && kda < 1.2) score -= 12
-  if (p.cs < 40 && p.gold < p.teamAvgGold * 0.55) score -= 10
+  if (role !== 'SUP' && p.cs < 40 && p.gold < p.teamAvgGold * 0.55) score -= 10
+  // Bonus kill participation légère via assists
+  score += Math.min(6, p.assists * 0.35)
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
@@ -489,15 +595,25 @@ function gradeFromScore(p: {
   assists: number
   gold: number
   damage: number
+  damageTurrets: number
+  damageObjectives: number
   cs: number
+  role: string
   teamAvgGold: number
   teamAvgDmg: number
+  teamAvgTurret: number
+  teamMaxDmg: number
+  teamMaxTurret: number
+  teamMaxObj: number
   score: number
   rankOnTeam: number
 }): { grade: DebriefPlayer['grade']; verdict: string } {
   const kda = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths
   const goldRatio = p.teamAvgGold > 0 ? p.gold / p.teamAvgGold : 1
   const dmgRatio = p.teamAvgDmg > 0 ? p.damage / p.teamAvgDmg : 1
+  const ledDmg = p.teamMaxDmg > 0 && p.damage >= p.teamMaxDmg * 0.98
+  const ledTurret = p.teamMaxTurret > 0 && p.damageTurrets >= p.teamMaxTurret * 0.98 && p.damageTurrets > 0
+  const ledObj = p.teamMaxObj > 0 && p.damageObjectives >= p.teamMaxObj * 0.98 && p.damageObjectives > 0
 
   if (p.deaths >= 9 && kda < 1 && goldRatio < 0.9) {
     return {
@@ -511,28 +627,40 @@ function gradeFromScore(p: {
       verdict: `Trop de morts (${p.deaths}) pour trop peu d’impact.`,
     }
   }
-  if (p.cs < 50 && p.gold < p.teamAvgGold * 0.6 && p.damage < p.teamAvgDmg * 0.55 && p.score < 48) {
+  if (
+    p.role !== 'SUP' &&
+    p.cs < 50 &&
+    p.gold < p.teamAvgGold * 0.6 &&
+    p.damage < p.teamAvgDmg * 0.55 &&
+    p.score < 48
+  ) {
     return {
       grade: 'GHOST',
       verdict: `Fantôme de la map, quasi aucun farm ni dégâts.`,
     }
   }
-  // Un seul CARRY par équipe: le #1 au score, avec un plancher
+
+  const dmgBits: string[] = []
+  if (ledDmg) dmgBits.push(`top dégâts champs (${formatK(p.damage)})`)
+  if (ledTurret) dmgBits.push(`top tours (${formatK(p.damageTurrets)})`)
+  if (ledObj) dmgBits.push(`top objectifs (${formatK(p.damageObjectives)})`)
+  const dmgNote = dmgBits.length ? ` ${dmgBits.join(', ')}.` : ''
+
   if (p.rankOnTeam === 0 && p.score >= 65) {
     return {
       grade: 'CARRY',
-      verdict: `Carry clair (KDA ${kda.toFixed(1)}). A porté les fights / l'économie.`,
+      verdict: `Carry clair (KDA ${kda.toFixed(1)}).${dmgNote || ' A porté fights / économie.'}`,
     }
   }
   if (p.score >= 55) {
     return {
       grade: 'SOLID',
-      verdict: `Presta propre (KDA ${kda.toFixed(1)}). Rôle tenu.`,
+      verdict: `Presta propre (KDA ${kda.toFixed(1)}).${dmgNote || ' Rôle tenu.'}`,
     }
   }
   return {
     grade: 'MEH',
-    verdict: `Impact moyen (KDA ${kda.toFixed(1)}).`,
+    verdict: `Impact moyen (KDA ${kda.toFixed(1)}). Dégâts ${formatK(p.damage)}.`,
   }
 }
 
@@ -584,33 +712,66 @@ export async function buildMatchDebrief(
   const enemyRows = parts.filter((p) => p.teamId !== yourTeamId)
   const avg = (list: NormPart[], key: keyof NormPart) =>
     list.length ? list.reduce((s, r) => s + (Number(r[key]) || 0), 0) / list.length : 0
+  const teamUtilityAvg = (list: NormPart[]) =>
+    list.length
+      ? list.reduce((s, r) => s + r.heal + r.shield * 1.2 + r.cc * 80 + r.vision * 40, 0) / list.length
+      : 0
+  const teamMax = (list: NormPart[], key: 'damage' | 'damageTurrets' | 'damageObjectives') =>
+    list.reduce((m, r) => Math.max(m, r[key] || 0), 0)
 
   type Scored = {
     part: NormPart
     score: number
     teamAvgGold: number
     teamAvgDmg: number
+    teamAvgTurret: number
+    teamMaxDmg: number
+    teamMaxTurret: number
+    teamMaxObj: number
+    role: string
   }
   const scored: Scored[] = parts.map((r) => {
     const teamRows = r.teamId === yourTeamId ? allyRows : enemyRows
+    const role = roleLabel(r.lane, r.role, r.position)
     const teamAvgGold = avg(teamRows, 'gold')
     const teamAvgDmg = avg(teamRows, 'damage')
+    const teamAvgTurret = avg(teamRows, 'damageTurrets')
+    const teamAvgObj = avg(teamRows, 'damageObjectives')
+    const teamAvgTaken = avg(teamRows, 'damageTaken')
     const teamAvgDeaths = avg(teamRows, 'deaths')
     return {
       part: r,
+      role,
       score: computePlayerScore({
         kills: r.kills,
         deaths: r.deaths,
         assists: r.assists,
         gold: r.gold,
         damage: r.damage,
+        damageTurrets: r.damageTurrets,
+        damageObjectives: r.damageObjectives,
+        damageTaken: r.damageTaken,
+        mitigated: r.mitigated,
+        heal: r.heal,
+        shield: r.shield,
+        cc: r.cc,
+        vision: r.vision,
         cs: r.cs,
+        role,
         teamAvgGold,
         teamAvgDmg,
+        teamAvgTurret,
+        teamAvgObj,
+        teamAvgTaken,
+        teamAvgUtility: teamUtilityAvg(teamRows),
         teamAvgDeaths,
       }),
       teamAvgGold,
       teamAvgDmg,
+      teamAvgTurret,
+      teamMaxDmg: teamMax(teamRows, 'damage'),
+      teamMaxTurret: teamMax(teamRows, 'damageTurrets'),
+      teamMaxObj: teamMax(teamRows, 'damageObjectives'),
     }
   })
 
@@ -630,9 +791,16 @@ export async function buildMatchDebrief(
       assists: r.assists,
       gold: r.gold,
       damage: r.damage,
+      damageTurrets: r.damageTurrets,
+      damageObjectives: r.damageObjectives,
       cs: r.cs,
+      role: row.role,
       teamAvgGold: row.teamAvgGold,
       teamAvgDmg: row.teamAvgDmg,
+      teamAvgTurret: row.teamAvgTurret,
+      teamMaxDmg: row.teamMaxDmg,
+      teamMaxTurret: row.teamMaxTurret,
+      teamMaxObj: row.teamMaxObj,
       score: row.score,
       rankOnTeam: rankOnTeam(row),
     })
@@ -654,13 +822,24 @@ export async function buildMatchDebrief(
       cs: r.cs,
       gold: r.gold,
       damage: r.damage,
+      damageTurrets: r.damageTurrets,
+      damageObjectives: r.damageObjectives,
+      damageTaken: r.damageTaken,
+      mitigated: r.mitigated,
+      heal: r.heal,
+      shield: r.shield,
+      cc: r.cc,
       vision: r.vision,
       items: r.items,
       win: r.win,
       isYou,
       grade: g.grade,
       verdict: isYou
-        ? g.verdict.replace(/^Trop de/, 'Tu as trop de').replace(/^Fantôme/, 'Tu étais un fantôme').replace(/^Feed/, 'Tu as feed').replace(/^Carry/, 'Tu as carry').replace(/^Presta/, 'Presta').replace(/^Impact/, 'Impact')
+        ? g.verdict
+            .replace(/^Trop de/, 'Tu as trop de')
+            .replace(/^Fantôme/, 'Tu étais un fantôme')
+            .replace(/^Feed/, 'Tu as feed')
+            .replace(/^Carry/, 'Tu as carry')
         : g.verdict,
       score: row.score,
     })
@@ -693,6 +872,15 @@ export async function buildMatchDebrief(
     if (enemyCarry && enemyCarry.score >= 65) {
       why.push(`Ils ont été portés par ${enemyCarry.gameName} (${enemyCarry.championName}).`)
     }
+  }
+
+  const topDmg = [...ally].sort((a, b) => b.damage - a.damage)[0]
+  const topTurret = [...ally].sort((a, b) => b.damageTurrets - a.damageTurrets)[0]
+  if (topDmg && topDmg.damage > 0) {
+    why.push(`Top dégâts champs alliés : ${topDmg.championName} (${formatK(topDmg.damage)}).`)
+  }
+  if (topTurret && topTurret.damageTurrets > 1500) {
+    why.push(`Top dégâts tours : ${topTurret.championName} (${formatK(topTurret.damageTurrets)}).`)
   }
 
   const youCard = players.find((p) => p.isYou)

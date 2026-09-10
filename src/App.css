@@ -3035,10 +3035,16 @@
 }
 
 .debrief-champ-name,
-.debrief-kda {
+.debrief-kda,
+.debrief-dmg {
   display: block;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.debrief-dmg {
+  color: rgba(153, 246, 228, 0.85);
+  font-variant-numeric: tabular-nums;
 }
 
 .debrief-meta p {

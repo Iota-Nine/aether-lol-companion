@@ -17,6 +17,12 @@ function formatDuration(sec: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
+function formatDamage(n: number): string {
+  if (!n) return '0'
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1)}k`
+  return String(Math.round(n))
+}
+
 function formatWhen(ms: number): string {
   if (!ms) return ''
   const d = new Date(ms)
@@ -115,6 +121,12 @@ function DebriefPanel({
                   <span className="debrief-kda">
                     {p.kills}/{p.deaths}/{p.assists} · CS {p.cs} · {Math.round(p.gold / 1000)}k or
                   </span>
+                  <span className="debrief-dmg">
+                    Dégâts {formatDamage(p.damage)}
+                    {p.damageTurrets > 0 ? ` · Tours ${formatDamage(p.damageTurrets)}` : ''}
+                    {p.damageObjectives > 0 ? ` · Obj ${formatDamage(p.damageObjectives)}` : ''}
+                    {p.damageTaken > 0 ? ` · Subis ${formatDamage(p.damageTaken)}` : ''}
+                  </span>
                   <p>{p.verdict}</p>
                   <ItemStrip items={p.items} />
                 </div>
@@ -190,6 +202,13 @@ function debriefFromSummary(match: MatchSummary): MatchDebrief {
     cs: match.cs,
     gold: match.gold,
     damage: 0,
+    damageTurrets: 0,
+    damageObjectives: 0,
+    damageTaken: 0,
+    mitigated: 0,
+    heal: 0,
+    shield: 0,
+    cc: 0,
     vision: 0,
     items: match.items,
     win: match.win,
