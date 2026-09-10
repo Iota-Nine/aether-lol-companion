@@ -14,6 +14,8 @@ const PROD_URL = `http://127.0.0.1:${API_PORT}`
 let mainWindow = null
 let overlayWindow = null
 let apiProcess = null
+let apiRestartTimer = null
+let isQuitting = false
 let overlayClickThrough = false
 let overlayKeepAliveTimer = null
 /** Si l’utilisateur déplace l’overlay, on arrête de le re-pin tant qu’il est ouvert */
@@ -87,6 +89,15 @@ function startApiServer() {
     if (code && code !== 0) {
       console.error(`[aether] API arrêtée (code ${code})`)
     }
+    if (isQuitting) return
+    if (apiRestartTimer) clearTimeout(apiRestartTimer)
+    apiRestartTimer = setTimeout(() => {
+      apiRestartTimer = null
+      if (!isQuitting) {
+        console.log('[aether] Relance API locale…')
+        startApiServer()
+      }
+    }, 1200)
   })
 }
 
@@ -150,7 +161,7 @@ function stopOverlayKeepAlive() {
 
 function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    // Ne JAMAIS focus() — ça descend League / vole le clavier
+    // Ne JAMAIS focus() - ça descend League / vole le clavier
     overlayWindow.showInactive()
     forceTopmost(overlayWindow)
     startOverlayKeepAlive()
@@ -160,8 +171,8 @@ function createOverlayWindow() {
   overlayUserMoved = false
 
   overlayWindow = new BrowserWindow({
-    width: 460,
-    height: 340,
+    width: 520,
+    height: 500,
     minWidth: 360,
     minHeight: 180,
     show: false,
@@ -266,7 +277,7 @@ function createWindow() {
     backgroundColor: '#05070c',
     show: false,
     autoHideMenuBar: true,
-    title: 'AETHER — LoL Companion',
+    title: 'AETHER LoL Companion',
     frame: false,
     titleBarStyle: 'hidden',
     icon: path.join(__dirname, 'icon.png'),
@@ -400,6 +411,11 @@ app.on('will-quit', () => {
 })
 
 app.on('window-all-closed', () => {
+  isQuitting = true
+  if (apiRestartTimer) {
+    clearTimeout(apiRestartTimer)
+    apiRestartTimer = null
+  }
   if (apiProcess) {
     apiProcess.kill()
     apiProcess = null
@@ -408,7 +424,12 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  isQuitting = true
   globalShortcut.unregisterAll()
+  if (apiRestartTimer) {
+    clearTimeout(apiRestartTimer)
+    apiRestartTimer = null
+  }
   if (apiProcess) {
     apiProcess.kill()
     apiProcess = null

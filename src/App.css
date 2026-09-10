@@ -2027,7 +2027,7 @@
   }
 }
 
-/* ── In-game Porofessor-like ── */
+/* ── In-game live board ── */
 .live-slot {
   position: relative;
   overflow: hidden;
@@ -2633,7 +2633,7 @@
   }
 }
 
-/* —— HOME / HISTORIQUE / DEBRIEF —— */
+/* -- HOME / HISTORIQUE / DEBRIEF -- */
 .home-board,
 .home-empty {
   max-width: 1280px;
@@ -3034,11 +3034,16 @@
   margin-left: 3px;
 }
 
-.debrief-champ-name,
-.debrief-kda {
+.debrief-kda,
+.debrief-dmg {
   display: block;
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.debrief-dmg {
+  color: rgba(153, 246, 228, 0.85);
+  font-variant-numeric: tabular-nums;
 }
 
 .debrief-meta p {

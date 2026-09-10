@@ -1,5 +1,5 @@
 /**
- * Win32 helpers — garder l’overlay TOPMOST au-dessus de League (borderless).
+ * Win32 helpers - garder l’overlay TOPMOST au-dessus de League (borderless).
  * Plein écran exclusif = impossible sans hook DirectX.
  */
 let koffi = null

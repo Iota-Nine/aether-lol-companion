@@ -47,7 +47,7 @@ function startInstallCountdown() {
   clearInstallCountdown()
   let left = Math.round(AUTO_INSTALL_AFTER_MS / 1000)
   state.installInSeconds = left
-  state.message = `v${state.version} prête — installation auto dans ${left}s (ou clique REDÉMARRER)`
+  state.message = `v${state.version} prête, installation auto dans ${left}s (ou clique REDÉMARRER)`
   emitState()
 
   installCountdown = setInterval(() => {
@@ -60,7 +60,7 @@ function startInstallCountdown() {
       autoUpdater.quitAndInstall(false, true)
       return
     }
-    state.message = `v${state.version} prête — installation auto dans ${left}s (ou clique REDÉMARRER)`
+    state.message = `v${state.version} prête, installation auto dans ${left}s (ou clique REDÉMARRER)`
     emitState()
   }, 1000)
 }
@@ -222,7 +222,7 @@ function setupAutoUpdater(win) {
     state.status = 'available'
     state.version = info.version
     state.progress = 0
-    state.message = `Version ${info.version} disponible — téléchargement…`
+    state.message = `Version ${info.version} disponible, téléchargement...`
     emitState()
   })
 

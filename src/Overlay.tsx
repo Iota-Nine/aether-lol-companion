@@ -53,7 +53,7 @@ export default function OverlayApp() {
   const a = ig?.teamTotals.ally
   const e = ig?.teamTotals.enemy
   const goldDiff = a && e ? a.gold - e.gold : 0
-  const events = (ig?.events || []).filter((ev) => (ev.kind || 'other') !== 'system').slice(0, 5)
+  const events = (ig?.events || []).filter((ev) => (ev.kind || 'other') !== 'system').slice(0, 10)
 
   return (
     <div className={`overlay-shell ${active ? 'hot' : ''} ${clickThrough ? 'thru' : ''}`}>
@@ -127,7 +127,7 @@ export default function OverlayApp() {
                 <div key={`oa-${p.cellId}`} className={`ov-chip ${p.live?.isDead ? 'dead' : ''}`} title={p.championName || ''}>
                   {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                   <em>
-                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '—'}
+                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '-'}
                   </em>
                 </div>
               ))}
@@ -137,7 +137,7 @@ export default function OverlayApp() {
                 <div key={`oe-${p.cellId}`} className={`ov-chip ${p.live?.isDead ? 'dead' : ''}`} title={p.championName || ''}>
                   {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                   <em>
-                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '—'}
+                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '-'}
                   </em>
                 </div>
               ))}

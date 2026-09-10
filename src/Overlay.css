@@ -236,22 +236,34 @@ html.overlay-mode #root {
 .overlay-feed {
   margin-top: 8px;
   display: grid;
-  gap: 3px;
-  max-height: 110px;
-  overflow: hidden;
-  padding: 8px;
+  gap: 4px;
+  max-height: 220px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(6, 10, 18, 0.7);
   backdrop-filter: blur(10px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
 .ov-ev {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
   padding-left: 6px;
   border-left: 2px solid rgba(148, 163, 184, 0.35);
+}
+
+.ov-ev span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ov-ev.kind-kill {
