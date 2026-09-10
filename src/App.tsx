@@ -754,7 +754,6 @@ export default function App() {
   const [syncFlash, setSyncFlash] = useState(false)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [metaLane, setMetaLane] = useState<LaneId>('mid')
-  const [creditGateOpen, setCreditGateOpen] = useState(true)
   const [overlay, setOverlay] = useState<OverlayState>({ open: false, clickThrough: false })
   const [pendingDebrief, setPendingDebrief] = useState(false)
   const wasInGameRef = useRef(false)
@@ -886,27 +885,6 @@ export default function App() {
     <div
       className={`hud ${isDesktop ? 'desktop' : ''} ${isTft ? 'mode-tft' : 'mode-lol'} ${isInGame ? 'mode-ingame' : ''} ${syncFlash ? 'syncing' : ''}`}
     >
-      {creditGateOpen && (
-        <div className="credit-gate" role="dialog" aria-modal="true" aria-labelledby="credit-gate-title">
-          <div className="credit-gate-card">
-            <span className="credit-gate-mark">Æ</span>
-            <p className="credit-gate-kicker">AETHER</p>
-            <h2 id="credit-gate-title">Made by Anissa</h2>
-            <p className="credit-gate-sub">Companion LoL, lecture seule</p>
-            <p className="credit-gate-feedback">
-              Feedback / idées ?{' '}
-              <a href="mailto:anissaanno94@gmail.com?subject=Feedback%20AETHER">anissaanno94@gmail.com</a>
-            </p>
-            <p className="credit-gate-discord">
-              Discord: <strong>sutabakusu</strong>
-            </p>
-            <button type="button" className="credit-gate-ok" autoFocus onClick={() => setCreditGateOpen(false)}>
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="hud-bg" aria-hidden>
         <div className="bg-aurora" />
         <div className="bg-grid" />

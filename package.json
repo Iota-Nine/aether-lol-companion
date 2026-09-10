@@ -1,7 +1,7 @@
 {
   "name": "aether-lol-companion",
   "private": true,
-  "version": "1.0.24",
+  "version": "1.0.25",
   "description": "AETHER: companion League of Legends desktop (LCU + meta ranked)",
   "author": "AETHER",
   "main": "electron/main.cjs",
