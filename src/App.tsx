@@ -702,6 +702,7 @@ export default function App() {
   const [metaLane, setMetaLane] = useState<LaneId>('mid')
   const [creditGateOpen, setCreditGateOpen] = useState(true)
   const [overlay, setOverlay] = useState<OverlayState>({ open: false, clickThrough: false })
+  const [pendingDebrief, setPendingDebrief] = useState(false)
   const wasInGameRef = useRef(false)
 
   const refresh = useCallback(async () => {
@@ -793,17 +794,23 @@ export default function App() {
   const showHome = isScoutMode && Boolean(live?.connected) && !isTft
   const showOfflineScout = isScoutMode && !live?.connected
 
-  // Auto-ouvre l’overlay au passage idle → in-game (desktop only)
+  // Overlay auto + debrief auto à la sortie de game
   useEffect(() => {
-    if (!window.aetherDesktop?.overlayShow) {
-      wasInGameRef.current = isInGame
-      return
-    }
     if (isInGame && !wasInGameRef.current) {
-      void window.aetherDesktop.overlayShow().then(setOverlay)
+      void window.aetherDesktop?.overlayShow?.().then(setOverlay)
     }
+    if (!isInGame && wasInGameRef.current) {
+      setPendingDebrief(true)
+    }
+    if (isInGame) setPendingDebrief(false)
     wasInGameRef.current = isInGame
   }, [isInGame])
+
+  useEffect(() => {
+    if (!pendingDebrief) return
+    const id = window.setTimeout(() => setPendingDebrief(false), 90_000)
+    return () => window.clearTimeout(id)
+  }, [pendingDebrief])
 
   const clockLabel = useMemo(
     () =>
@@ -1040,7 +1047,10 @@ export default function App() {
       {error && <div className="alert-banner">{error}</div>}
 
       {isScoutMode && (
-        <HomeBoard connected={Boolean(live?.connected)} forceLatestDebrief={isEndOfGame} />
+        <HomeBoard
+          connected={Boolean(live?.connected)}
+          forceLatestDebrief={isEndOfGame || pendingDebrief}
+        />
       )}
 
       {live && isTft && (
@@ -1183,7 +1193,7 @@ export default function App() {
       )}
 
       <footer className="hud-footer">
-        <span>AETHER HUD v1.7 · OVERLAY</span>
+        <span>AETHER HUD v1.8 · HISTO + DEBRIEF AUTO</span>
         <span>Fenêtre sans bordure LoL · overlay topmost</span>
         <span>Non affilié à Riot Games</span>
       </footer>

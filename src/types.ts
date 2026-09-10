@@ -178,6 +178,8 @@ export interface MatchSummary {
   items: number[]
   spell1Id: number | null
   spell2Id: number | null
+  autoGrade?: 'CARRY' | 'SOLID' | 'MEH' | 'INT' | 'FEED' | 'GHOST' | null
+  autoVerdict?: string | null
 }
 
 export interface ProfileHome {

@@ -46,6 +46,9 @@ export interface MatchSummary {
   items: number[]
   spell1Id: number | null
   spell2Id: number | null
+  /** Mini-verdict auto (toi) pour la liste historique */
+  autoGrade: DebriefPlayer['grade'] | null
+  autoVerdict: string | null
 }
 
 export interface DebriefPlayer {
@@ -96,89 +99,201 @@ function queueLabel(id?: number): string {
       return 'ARAM'
     case 1700:
       return 'Arena'
+    case 490:
+      return 'Quickplay'
     default:
       return id != null ? `Queue ${id}` : 'LoL'
   }
 }
 
-function roleLabel(lane?: string, role?: string): string {
-  const l = (lane || '').toUpperCase()
-  const r = (role || '').toUpperCase()
-  if (l.includes('TOP')) return 'TOP'
-  if (l.includes('JUNG')) return 'JGL'
-  if (l.includes('MID')) return 'MID'
-  if (l.includes('BOT') || l.includes('BOTTOM')) {
-    if (r.includes('SUPPORT') || r.includes('DUO_SUPPORT')) return 'SUP'
-    return 'ADC'
-  }
-  if (r.includes('SUPPORT')) return 'SUP'
+function roleLabel(lane?: string, role?: string, position?: string): string {
+  const raw = `${lane || ''} ${role || ''} ${position || ''}`.toUpperCase()
+  if (raw.includes('TOP')) return 'TOP'
+  if (raw.includes('JUNG')) return 'JGL'
+  if (raw.includes('MID') || raw.includes('MIDDLE')) return 'MID'
+  if (raw.includes('SUPPORT') || raw.includes('UTILITY')) return 'SUP'
+  if (raw.includes('ADC') || raw.includes('BOTTOM') || raw.includes('BOT')) return 'ADC'
   return '—'
 }
 
-interface RawIdentity {
-  participantId?: number
-  player?: {
-    puuid?: string
-    gameName?: string
-    tagLine?: string
-    summonerName?: string
-    riotIdGameName?: string
-    riotIdTagLine?: string
-  }
-}
-
-interface RawParticipant {
-  participantId?: number
-  championId?: number
-  spell1Id?: number
-  spell2Id?: number
-  teamId?: number
-  stats?: {
-    win?: boolean
-    kills?: number
-    deaths?: number
-    assists?: number
-    totalMinionsKilled?: number
-    neutralMinionsKilled?: number
-    goldEarned?: number
-    totalDamageDealtToChampions?: number
-    visionScore?: number
-    item0?: number
-    item1?: number
-    item2?: number
-    item3?: number
-    item4?: number
-    item5?: number
-    item6?: number
-  }
-  timeline?: { lane?: string; role?: string }
+/** Participant normalisé (ancien LCU stats{} OU format plat type Match-v5) */
+interface NormPart {
+  participantId: number | null
+  puuid: string | null
+  championId: number
+  spell1Id: number | null
+  spell2Id: number | null
+  teamId: number
+  win: boolean
+  kills: number
+  deaths: number
+  assists: number
+  cs: number
+  gold: number
+  damage: number
+  vision: number
+  items: number[]
+  lane: string
+  role: string
+  position: string
+  gameName: string
+  tagLine: string
 }
 
 interface RawGame {
-  gameId?: number
+  gameId?: number | string
   gameCreation?: number
   gameDuration?: number
   queueId?: number
   gameMode?: string
-  participants?: RawParticipant[]
-  participantIdentities?: RawIdentity[]
+  participants?: Record<string, unknown>[]
+  participantIdentities?: Array<{
+    participantId?: number
+    player?: {
+      puuid?: string
+      gameName?: string
+      tagLine?: string
+      summonerName?: string
+      riotIdGameName?: string
+      riotIdTagLine?: string
+    }
+  }>
 }
 
-function itemsOf(stats?: RawParticipant['stats']): number[] {
-  if (!stats) return []
-  return [stats.item0, stats.item1, stats.item2, stats.item3, stats.item4, stats.item5, stats.item6]
-    .filter((id): id is number => typeof id === 'number' && id > 0)
+function asNum(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
+  return null
 }
 
-function nameOf(id: RawIdentity | undefined): { gameName: string; tagLine: string } {
-  const p = id?.player
-  if (p?.riotIdGameName) return { gameName: p.riotIdGameName, tagLine: p.riotIdTagLine || '???' }
-  if (p?.gameName) return { gameName: p.gameName, tagLine: p.tagLine || '???' }
-  if (p?.summonerName?.includes('#')) {
+function itemsFrom(obj: Record<string, unknown> | null | undefined): number[] {
+  if (!obj) return []
+  return [0, 1, 2, 3, 4, 5, 6]
+    .map((i) => asNum(obj[`item${i}`]))
+    .filter((id): id is number => id != null && id > 0)
+}
+
+function nameFromPlayer(p?: {
+  gameName?: string
+  tagLine?: string
+  summonerName?: string
+  riotIdGameName?: string
+  riotIdTagLine?: string
+}): { gameName: string; tagLine: string } {
+  if (!p) return { gameName: 'Joueur', tagLine: '???' }
+  if (p.riotIdGameName) return { gameName: p.riotIdGameName, tagLine: p.riotIdTagLine || '???' }
+  if (p.gameName) return { gameName: p.gameName, tagLine: p.tagLine || '???' }
+  if (p.summonerName?.includes('#')) {
     const [g, t] = p.summonerName.split('#')
     return { gameName: g || 'Joueur', tagLine: t || '???' }
   }
-  return { gameName: p?.summonerName || 'Joueur', tagLine: '???' }
+  return { gameName: p.summonerName || 'Joueur', tagLine: '???' }
+}
+
+function normalizeParticipant(
+  raw: Record<string, unknown>,
+  identity?: RawGame['participantIdentities'] extends (infer I)[] | undefined ? I : never,
+): NormPart {
+  const stats =
+    raw.stats && typeof raw.stats === 'object' ? (raw.stats as Record<string, unknown>) : raw
+  const timeline =
+    raw.timeline && typeof raw.timeline === 'object'
+      ? (raw.timeline as Record<string, unknown>)
+      : {}
+  const fromId = nameFromPlayer(identity?.player)
+  const riotName =
+    typeof raw.riotIdGameName === 'string'
+      ? {
+          gameName: raw.riotIdGameName as string,
+          tagLine: String(raw.riotIdTagLine || raw.tagLine || '???'),
+        }
+      : typeof raw.gameName === 'string'
+        ? { gameName: raw.gameName as string, tagLine: String(raw.tagLine || '???') }
+        : fromId
+
+  const puuid =
+    (typeof raw.puuid === 'string' && raw.puuid) ||
+    identity?.player?.puuid ||
+    (raw.player && typeof (raw.player as { puuid?: string }).puuid === 'string'
+      ? (raw.player as { puuid: string }).puuid
+      : null)
+
+  return {
+    participantId: asNum(raw.participantId),
+    puuid,
+    championId: asNum(raw.championId) || 0,
+    spell1Id: asNum(raw.spell1Id) ?? asNum(raw.summoner1Id),
+    spell2Id: asNum(raw.spell2Id) ?? asNum(raw.summoner2Id),
+    teamId: asNum(raw.teamId) || 100,
+    win: Boolean(stats.win),
+    kills: asNum(stats.kills) || 0,
+    deaths: asNum(stats.deaths) || 0,
+    assists: asNum(stats.assists) || 0,
+    cs:
+      (asNum(stats.totalMinionsKilled) || 0) +
+      (asNum(stats.neutralMinionsKilled) || 0) +
+      (asNum(stats.totalAllyJungleMinionsKilled) || 0) +
+      (asNum(stats.totalEnemyJungleMinionsKilled) || 0),
+    gold: asNum(stats.goldEarned) || 0,
+    damage: asNum(stats.totalDamageDealtToChampions) || 0,
+    vision: asNum(stats.visionScore) || 0,
+    items: itemsFrom(stats),
+    lane: String(timeline.lane || raw.lane || raw.individualPosition || ''),
+    role: String(timeline.role || raw.role || ''),
+    position: String(raw.teamPosition || raw.individualPosition || ''),
+    gameName: riotName.gameName,
+    tagLine: riotName.tagLine,
+  }
+}
+
+function durationSeconds(raw?: number): number {
+  if (raw == null || !Number.isFinite(raw)) return 0
+  // LCU parfois en ms
+  if (raw > 20_000) return Math.round(raw / 1000)
+  return Math.round(raw)
+}
+
+function extractGames(hist: unknown): RawGame[] {
+  if (!hist || typeof hist !== 'object') return []
+  const h = hist as Record<string, unknown>
+  const gamesNode = h.games
+  if (Array.isArray(gamesNode)) return gamesNode as RawGame[]
+  if (gamesNode && typeof gamesNode === 'object') {
+    const inner = (gamesNode as { games?: unknown }).games
+    if (Array.isArray(inner)) return inner as RawGame[]
+  }
+  if (Array.isArray(h.gameList)) return h.gameList as RawGame[]
+  return []
+}
+
+function findYouPart(game: RawGame, puuid: string): NormPart | null {
+  const parts = (game.participants || []).map((p) => {
+    const pid = asNum(p.participantId)
+    const identity = game.participantIdentities?.find((i) => i.participantId === pid)
+    return normalizeParticipant(p, identity)
+  })
+  if (!parts.length) return null
+
+  const byPuuid = parts.find((p) => p.puuid && p.puuid === puuid)
+  if (byPuuid) return byPuuid
+
+  const identity = game.participantIdentities?.find((i) => i.player?.puuid === puuid)
+  if (identity?.participantId != null) {
+    const hit = parts.find((p) => p.participantId === identity.participantId)
+    if (hit) return hit
+  }
+
+  // Historique parfois tronqué : un seul participant = toi
+  if (parts.length === 1) return parts[0]!
+  return null
+}
+
+function allNormParts(game: RawGame): NormPart[] {
+  return (game.participants || []).map((p) => {
+    const pid = asNum(p.participantId)
+    const identity = game.participantIdentities?.find((i) => i.participantId === pid)
+    return normalizeParticipant(p, identity)
+  })
 }
 
 async function ddragonVersion(): Promise<string> {
@@ -188,6 +303,24 @@ async function ddragonVersion(): Promise<string> {
   } catch {
     return DDRAGON_FALLBACK
   }
+}
+
+async function fetchRawMatchList(
+  lockfile: LockfileData,
+  puuid: string,
+  limit: number,
+): Promise<RawGame[]> {
+  const end = Math.max(limit - 1, 0)
+  const endpoints = [
+    `/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=${end}`,
+    `/lol-match-history/v1/products/lol/${puuid}/matches`,
+  ]
+  for (const ep of endpoints) {
+    const hist = await lcuGet<unknown>(lockfile, ep)
+    const games = extractGames(hist)
+    if (games.length) return games
+  }
+  return []
 }
 
 export async function buildProfileHome(lockfile: LockfileData): Promise<ProfileHome | null> {
@@ -207,7 +340,7 @@ export async function buildProfileHome(lockfile: LockfileData): Promise<ProfileH
   const version = await ddragonVersion()
   const iconId = me.profileIconId || 29
   const stats = await fetchPlayerStats(lockfile, me.puuid, 'lol')
-  const matches = await fetchMatchSummaries(lockfile, me.puuid, 15)
+  const matches = await fetchMatchSummaries(lockfile, me.puuid, 20)
 
   return {
     connected: true,
@@ -234,49 +367,71 @@ export async function buildProfileHome(lockfile: LockfileData): Promise<ProfileH
   }
 }
 
+function soloGrade(p: {
+  kills: number
+  deaths: number
+  assists: number
+  gold: number
+  damage: number
+  cs: number
+}): { grade: DebriefPlayer['grade']; verdict: string } {
+  const kda = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths
+  if (p.deaths >= 9 && kda < 1) {
+    return { grade: 'FEED', verdict: `Tu as feed (${p.kills}/${p.deaths}/${p.assists}).` }
+  }
+  if (p.deaths >= 6 && kda < 1.3) {
+    return { grade: 'INT', verdict: `Trop de morts (${p.deaths}) pour trop peu d’impact.` }
+  }
+  if (kda >= 3 && (p.kills >= 6 || p.assists >= 10)) {
+    return { grade: 'CARRY', verdict: `Tu as carry (KDA ${kda.toFixed(1)}).` }
+  }
+  if (kda >= 2) {
+    return { grade: 'SOLID', verdict: `Presta propre (KDA ${kda.toFixed(1)}).` }
+  }
+  if (p.cs < 50 && p.gold < 8000) {
+    return { grade: 'GHOST', verdict: `Peu de présence (farm / or bas).` }
+  }
+  return { grade: 'MEH', verdict: `Impact moyen (KDA ${kda.toFixed(1)}).` }
+}
+
 export async function fetchMatchSummaries(
   lockfile: LockfileData,
   puuid: string,
-  limit = 15,
+  limit = 20,
 ): Promise<MatchSummary[]> {
-  const hist = await lcuGet<{ games?: { games?: RawGame[] } }>(
-    lockfile,
-    `/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=${Math.max(limit - 1, 0)}`,
-  )
-  const games = hist?.games?.games ?? []
+  const games = await fetchRawMatchList(lockfile, puuid, limit)
   const out: MatchSummary[] = []
 
   for (const g of games.slice(0, limit)) {
-    if (!g.gameId) continue
-    const identity = g.participantIdentities?.find((i) => i.player?.puuid === puuid)
-    const pid = identity?.participantId
-    const part =
-      (pid != null ? g.participants?.find((p) => p.participantId === pid) : null) ?? null
-    if (!part?.stats) continue
+    const gameId = asNum(g.gameId)
+    if (gameId == null) continue
+    const you = findYouPart(g, puuid)
+    if (!you) continue
 
-    const champ = part.championId ? await getChampionById(part.championId) : null
-    const cs =
-      (part.stats.totalMinionsKilled || 0) + (part.stats.neutralMinionsKilled || 0)
+    const champ = you.championId ? await getChampionById(you.championId) : null
+    const mini = soloGrade(you)
 
     out.push({
-      gameId: g.gameId,
+      gameId,
       gameCreation: g.gameCreation || 0,
-      gameDuration: g.gameDuration || 0,
+      gameDuration: durationSeconds(g.gameDuration),
       queueId: g.queueId || 0,
       queueLabel: queueLabel(g.queueId),
-      win: Boolean(part.stats.win),
-      championId: part.championId || 0,
-      championName: champ?.name || `Champ ${part.championId}`,
+      win: you.win,
+      championId: you.championId,
+      championName: champ?.name || `Champ ${you.championId}`,
       championImage: champ?.image || null,
-      kills: part.stats.kills || 0,
-      deaths: part.stats.deaths || 0,
-      assists: part.stats.assists || 0,
-      cs,
-      gold: part.stats.goldEarned || 0,
-      role: roleLabel(part.timeline?.lane, part.timeline?.role),
-      items: itemsOf(part.stats),
-      spell1Id: part.spell1Id ?? null,
-      spell2Id: part.spell2Id ?? null,
+      kills: you.kills,
+      deaths: you.deaths,
+      assists: you.assists,
+      cs: you.cs,
+      gold: you.gold,
+      role: roleLabel(you.lane, you.role, you.position),
+      items: you.items,
+      spell1Id: you.spell1Id,
+      spell2Id: you.spell2Id,
+      autoGrade: mini.grade,
+      autoVerdict: mini.verdict,
     })
   }
 
@@ -357,72 +512,43 @@ export async function buildMatchDebrief(
 ): Promise<MatchDebrief | null> {
   let game = await lcuGet<RawGame>(lockfile, `/lol-match-history/v1/games/${gameId}`)
 
-  // fallback: pull from history list and find game
+  const mePuuid =
+    youPuuid ||
+    (await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner'))?.puuid ||
+    null
+  if (!mePuuid) return null
+
   if (!game?.participants?.length) {
-    const me = youPuuid
-      ? { puuid: youPuuid }
-      : await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner')
-    if (!me?.puuid) return null
-    const hist = await lcuGet<{ games?: { games?: RawGame[] } }>(
-      lockfile,
-      `/lol-match-history/v1/products/lol/${me.puuid}/matches?begIndex=0&endIndex=19`,
-    )
-    game = hist?.games?.games?.find((g) => g.gameId === gameId) || null
+    const list = await fetchRawMatchList(lockfile, mePuuid, 20)
+    game = list.find((g) => asNum(g.gameId) === gameId) || null
   }
 
   if (!game?.participants?.length) return null
 
-  const me =
-    youPuuid ||
-    (await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner'))?.puuid ||
+  const parts = allNormParts(game)
+  if (!parts.length) return null
+
+  let you =
+    parts.find((p) => p.puuid && p.puuid === mePuuid) ||
     null
-
-  const youIdentity = game.participantIdentities?.find((i) => i.player?.puuid === me)
-  const youPart =
-    (youIdentity?.participantId != null
-      ? game.participants.find((p) => p.participantId === youIdentity.participantId)
-      : null) || null
-  const yourTeamId = youPart?.teamId ?? 100
-  const youWon = Boolean(youPart?.stats?.win)
-
-  type Row = {
-    part: RawParticipant
-    identity?: RawIdentity
-    kills: number
-    deaths: number
-    assists: number
-    gold: number
-    damage: number
-    cs: number
-    vision: number
-    team: 'ally' | 'enemy'
+  if (!you) {
+    const identity = game.participantIdentities?.find((i) => i.player?.puuid === mePuuid)
+    if (identity?.participantId != null) {
+      you = parts.find((p) => p.participantId === identity.participantId) || null
+    }
   }
+  if (!you && parts.length === 1) you = parts[0]!
+  if (!you) you = parts[0]!
 
-  const rows: Row[] = []
-  for (const part of game.participants) {
-    const identity = game.participantIdentities?.find((i) => i.participantId === part.participantId)
-    const team: 'ally' | 'enemy' = part.teamId === yourTeamId ? 'ally' : 'enemy'
-    rows.push({
-      part,
-      identity,
-      kills: part.stats?.kills || 0,
-      deaths: part.stats?.deaths || 0,
-      assists: part.stats?.assists || 0,
-      gold: part.stats?.goldEarned || 0,
-      damage: part.stats?.totalDamageDealtToChampions || 0,
-      cs: (part.stats?.totalMinionsKilled || 0) + (part.stats?.neutralMinionsKilled || 0),
-      vision: part.stats?.visionScore || 0,
-      team,
-    })
-  }
-
-  const allyRows = rows.filter((r) => r.team === 'ally')
-  const avg = (list: Row[], key: keyof Row) =>
-    list.length ? list.reduce((s, r) => s + (r[key] as number), 0) / list.length : 0
+  const yourTeamId = you.teamId
+  const youWon = you.win
+  const allyRows = parts.filter((p) => p.teamId === yourTeamId)
+  const avg = (list: NormPart[], key: keyof NormPart) =>
+    list.length ? list.reduce((s, r) => s + (Number(r[key]) || 0), 0) / list.length : 0
 
   const players: DebriefPlayer[] = []
-  for (const r of rows) {
-    const teamRows = r.team === 'ally' ? allyRows : rows.filter((x) => x.team === 'enemy')
+  for (const r of parts) {
+    const teamRows = r.teamId === yourTeamId ? allyRows : parts.filter((x) => x.teamId !== yourTeamId)
     const g = gradePlayer({
       kills: r.kills,
       deaths: r.deaths,
@@ -434,14 +560,16 @@ export async function buildMatchDebrief(
       teamAvgDmg: avg(teamRows, 'damage'),
       teamAvgDeaths: avg(teamRows, 'deaths'),
     })
-    const nm = nameOf(r.identity)
-    const champ = r.part.championId ? await getChampionById(r.part.championId) : null
-    const isYou = r.identity?.player?.puuid === me
+    const champ = r.championId ? await getChampionById(r.championId) : null
+    const isYou =
+      r === you ||
+      Boolean(r.puuid && r.puuid === mePuuid) ||
+      (you.participantId != null && r.participantId === you.participantId)
     players.push({
-      gameName: nm.gameName,
-      tagLine: nm.tagLine,
-      team: r.team,
-      championId: r.part.championId || 0,
+      gameName: r.gameName,
+      tagLine: r.tagLine,
+      team: r.teamId === yourTeamId ? 'ally' : 'enemy',
+      championId: r.championId,
       championName: champ?.name || '?',
       championImage: champ?.image || null,
       kills: r.kills,
@@ -451,11 +579,13 @@ export async function buildMatchDebrief(
       gold: r.gold,
       damage: r.damage,
       vision: r.vision,
-      items: itemsOf(r.part.stats),
-      win: Boolean(r.part.stats?.win),
+      items: r.items,
+      win: r.win,
       isYou,
       grade: g.grade,
-      verdict: isYou ? g.verdict.replace(/^A /, 'Tu as ').replace(/^Fantôme/, 'Tu étais un fantôme') : g.verdict,
+      verdict: isYou
+        ? g.verdict.replace(/^A /, 'Tu as ').replace(/^Fantôme/, 'Tu étais un fantôme')
+        : g.verdict,
       score: g.score,
     })
   }
@@ -487,8 +617,8 @@ export async function buildMatchDebrief(
     }
   }
 
-  const you = players.find((p) => p.isYou)
-  if (you) why.push(`Toi (${you.championName}) : ${you.verdict}`)
+  const youCard = players.find((p) => p.isYou)
+  if (youCard) why.push(`Toi (${youCard.championName}) : ${youCard.verdict}`)
 
   const headline = youWon
     ? `WIN — ${mvp ? `${mvp.championName} a carry` : 'équipe propre'}`
@@ -497,7 +627,7 @@ export async function buildMatchDebrief(
   return {
     gameId,
     win: youWon,
-    gameDuration: game.gameDuration || 0,
+    gameDuration: durationSeconds(game.gameDuration),
     queueLabel: queueLabel(game.queueId),
     headline,
     why,
@@ -507,20 +637,33 @@ export async function buildMatchDebrief(
   }
 }
 
+function extractEogGameId(eog: unknown): number | null {
+  if (!eog || typeof eog !== 'object') return null
+  const o = eog as Record<string, unknown>
+  const direct = asNum(o.gameId) ?? asNum((o as { muleGameId?: unknown }).muleGameId)
+  if (direct != null) return direct
+  if (o.game && typeof o.game === 'object') {
+    const g = o.game as Record<string, unknown>
+    const nested = asNum(g.id) ?? asNum(g.gameId)
+    if (nested != null) return nested
+  }
+  return null
+}
+
 /** Essaie le bloc fin de game LCU, sinon dernière partie de l’historique */
 export async function buildLatestDebrief(lockfile: LockfileData): Promise<MatchDebrief | null> {
   const me = await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner')
   if (!me?.puuid) return null
 
-  const eog = await lcuGet<{ gameId?: number }>(lockfile, '/lol-end-of-game/v1/eog-stats-block')
-  const eogId = typeof eog?.gameId === 'number' ? eog.gameId : null
+  const eog = await lcuGet<unknown>(lockfile, '/lol-end-of-game/v1/eog-stats-block')
+  const eogId = extractEogGameId(eog)
 
-  if (eogId) {
+  if (eogId != null) {
     const d = await buildMatchDebrief(lockfile, eogId, me.puuid)
     if (d) return d
   }
 
-  const list = await fetchMatchSummaries(lockfile, me.puuid, 1)
+  const list = await fetchMatchSummaries(lockfile, me.puuid, 3)
   if (!list[0]) return null
   return buildMatchDebrief(lockfile, list[0].gameId, me.puuid)
 }

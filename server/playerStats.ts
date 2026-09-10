@@ -84,32 +84,43 @@ async function lolRecentForm(
   lockfile: LockfileData,
   puuid: string,
 ): Promise<{ recentWR: number | null; recentGames: number }> {
-  const hist = await lcuGet<{
-    games?: {
-      games?: Array<{
-        gameMode?: string
-        participants?: Array<{ stats?: { win?: boolean }; participantId?: number }>
-        participantIdentities?: Array<{
-          participantId?: number
-          player?: { puuid?: string }
-        }>
-      }>
-    }
-  }>(lockfile, `/lol-match-history/v1/products/lol/${puuid}/matches`)
+  const hist = await lcuGet<unknown>(
+    lockfile,
+    `/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=19`,
+  )
 
-  const games = hist?.games?.games ?? []
+  const root = hist as {
+    games?: { games?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
+  } | null
+  const games = Array.isArray(root?.games)
+    ? root.games
+    : Array.isArray((root?.games as { games?: unknown })?.games)
+      ? ((root?.games as { games: Array<Record<string, unknown>> }).games)
+      : []
+
   let wins = 0
   let n = 0
   for (const g of games.slice(0, 20)) {
-    // skip weird modes if needed
-    const identity = g.participantIdentities?.find((i) => i.player?.puuid === puuid)
-    const pid = identity?.participantId
-    const part =
-      (pid != null ? g.participants?.find((p) => p.participantId === pid) : null) ??
-      g.participants?.[0]
-    if (!part?.stats || typeof part.stats.win !== 'boolean') continue
+    const identities = (g.participantIdentities as Array<{
+      participantId?: number
+      player?: { puuid?: string }
+    }>) || []
+    const participants = (g.participants as Array<Record<string, unknown>>) || []
+    const identity = identities.find((i) => i.player?.puuid === puuid)
+    let part =
+      (identity?.participantId != null
+        ? participants.find((p) => Number(p.participantId) === identity.participantId)
+        : null) ||
+      participants.find((p) => p.puuid === puuid) ||
+      (participants.length === 1 ? participants[0] : null)
+    if (!part) continue
+    const stats =
+      part.stats && typeof part.stats === 'object'
+        ? (part.stats as { win?: boolean })
+        : (part as { win?: boolean })
+    if (typeof stats.win !== 'boolean') continue
     n++
-    if (part.stats.win) wins++
+    if (stats.win) wins++
   }
   if (!n) return { recentWR: null, recentGames: 0 }
   return { recentWR: Number(((wins / n) * 100).toFixed(1)), recentGames: n }

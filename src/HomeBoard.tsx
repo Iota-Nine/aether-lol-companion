@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchProfile, fetchMatchDebrief, fetchLatestDebrief } from './api'
 import type { ProfileHome, MatchDebrief, MatchSummary } from './types'
 import { itemIconUrl, resolveSpellIcon } from './ddragon'
@@ -54,18 +54,23 @@ function SpellPair({ a, b }: { a: number | null; b: number | null }) {
 function DebriefPanel({
   debrief,
   onClose,
+  auto,
 }: {
   debrief: MatchDebrief
   onClose?: () => void
+  auto?: boolean
 }) {
   const allies = debrief.players.filter((p) => p.team === 'ally')
   const enemies = debrief.players.filter((p) => p.team === 'enemy')
 
   return (
-    <section className={`debrief-panel ${debrief.win ? 'win' : 'loss'}`}>
+    <section className={`debrief-panel ${debrief.win ? 'win' : 'loss'} ${auto ? 'auto' : ''}`}>
       <header className="debrief-head">
         <div>
-          <span className="debrief-kicker">{debrief.win ? 'VICTOIRE' : 'DÉFAITE'} · {debrief.queueLabel}</span>
+          <span className="debrief-kicker">
+            {auto ? 'DEBRIEF AUTO · ' : ''}
+            {debrief.win ? 'VICTOIRE' : 'DÉFAITE'} · {debrief.queueLabel}
+          </span>
           <h2>{debrief.headline}</h2>
           <p className="debrief-dur">{formatDuration(debrief.gameDuration)}</p>
         </div>
@@ -123,12 +128,18 @@ function DebriefPanel({
 function MatchCard({
   match,
   onOpen,
+  active,
 }: {
   match: MatchSummary
   onOpen: (id: number) => void
+  active?: boolean
 }) {
   return (
-    <button type="button" className={`match-card ${match.win ? 'win' : 'loss'}`} onClick={() => onOpen(match.gameId)}>
+    <button
+      type="button"
+      className={`match-card ${match.win ? 'win' : 'loss'} ${active ? 'active' : ''}`}
+      onClick={() => onOpen(match.gameId)}
+    >
       <div className="match-result">{match.win ? 'W' : 'L'}</div>
       <div className="match-champ">
         {match.championImage ? <img src={match.championImage} alt="" /> : <span>?</span>}
@@ -138,11 +149,13 @@ function MatchCard({
         <div className="match-top">
           <strong>{match.championName}</strong>
           <span className="role-chip">{match.role}</span>
+          {match.autoGrade && <span className={`grade-chip inline grade-${match.autoGrade.toLowerCase()}`}>{match.autoGrade}</span>}
         </div>
         <div className="match-kda">
           {match.kills}/{match.deaths}/{match.assists}
           <em>CS {match.cs}</em>
         </div>
+        {match.autoVerdict && <p className="match-verdict">{match.autoVerdict}</p>}
         <ItemStrip items={match.items} />
         <div className="match-foot">
           <span>{match.queueLabel}</span>
@@ -150,10 +163,12 @@ function MatchCard({
           <span>{formatWhen(match.gameCreation)}</span>
         </div>
       </div>
-      <span className="match-open">DEBRIEF →</span>
+      <span className="match-open">{active ? 'OUVERT' : 'DEBRIEF →'}</span>
     </button>
   )
 }
+
+const SEEN_KEY = 'aether:lastDebriefGameId'
 
 export function HomeBoard({
   connected,
@@ -167,6 +182,46 @@ export function HomeBoard({
   const [loading, setLoading] = useState(true)
   const [debrief, setDebrief] = useState<MatchDebrief | null>(null)
   const [debriefLoading, setDebriefLoading] = useState(false)
+  const [autoOpen, setAutoOpen] = useState(false)
+  const seenRef = useRef<number | null>(null)
+  const retryRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SEEN_KEY)
+      seenRef.current = raw ? Number(raw) : null
+    } catch {
+      seenRef.current = null
+    }
+  }, [])
+
+  const rememberDebrief = (gameId: number) => {
+    seenRef.current = gameId
+    try {
+      sessionStorage.setItem(SEEN_KEY, String(gameId))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const loadDebrief = useCallback(async (gameId: number | 'latest', markAuto = false) => {
+    setDebriefLoading(true)
+    try {
+      const d = gameId === 'latest' ? await fetchLatestDebrief() : await fetchMatchDebrief(gameId)
+      setDebrief(d)
+      setAutoOpen(markAuto)
+      rememberDebrief(d.gameId)
+      setError(null)
+      return d
+    } catch (e) {
+      if (!markAuto) {
+        setError(e instanceof Error ? e.message : 'Debrief impossible')
+      }
+      return null
+    } finally {
+      setDebriefLoading(false)
+    }
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!connected) {
@@ -176,48 +231,56 @@ export function HomeBoard({
     }
     try {
       const data = await fetchProfile()
-      setProfile(data.connected ? data : null)
+      if (!data.connected) {
+        setProfile(null)
+        setError(null)
+        return
+      }
+      setProfile(data)
       setError(null)
+
+      const latest = data.matches?.[0]
+      if (latest && latest.gameId !== seenRef.current) {
+        void loadDebrief(latest.gameId, true)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Profil indisponible')
     } finally {
       setLoading(false)
     }
-  }, [connected])
+  }, [connected, loadDebrief])
 
   useEffect(() => {
     void refresh()
     if (!connected) return
-    const id = window.setInterval(() => void refresh(), 20_000)
+    const id = window.setInterval(() => void refresh(), 12_000)
     return () => window.clearInterval(id)
   }, [refresh, connected])
 
+  // Fin de game : retry agressif jusqu’à ce que LCU livre le match
   useEffect(() => {
     if (!forceLatestDebrief || !connected) return
     let cancelled = false
-    ;(async () => {
-      try {
-        const d = await fetchLatestDebrief()
-        if (!cancelled) setDebrief(d)
-      } catch {
-        /* pas encore dispo */
+    let tries = 0
+
+    const tick = async () => {
+      if (cancelled) return
+      tries += 1
+      const d = await loadDebrief('latest', true)
+      if (!d && tries < 12) {
+        retryRef.current = window.setTimeout(() => void tick(), 2500)
       }
-    })()
+    }
+    void tick()
+
     return () => {
       cancelled = true
+      if (retryRef.current) window.clearTimeout(retryRef.current)
     }
-  }, [forceLatestDebrief, connected])
+  }, [forceLatestDebrief, connected, loadDebrief])
 
-  const openDebrief = async (gameId: number) => {
-    setDebriefLoading(true)
-    try {
-      const d = await fetchMatchDebrief(gameId)
-      setDebrief(d)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Debrief impossible')
-    } finally {
-      setDebriefLoading(false)
-    }
+  const openDebrief = (gameId: number) => {
+    void loadDebrief(gameId, false)
   }
 
   if (!connected) {
@@ -271,13 +334,13 @@ export function HomeBoard({
           <div>
             <span>WR RANKED</span>
             <strong>{s?.rankedWR != null ? `${s.rankedWR}%` : '—'}</strong>
-            <em>
-              {s ? `${s.wins}W ${s.losses}L` : ''}
-            </em>
+            <em>{s ? `${s.wins}W ${s.losses}L` : ''}</em>
           </div>
           <div>
             <span>FORME RÉCENTE</span>
-            <strong>{s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '—'}</strong>
+            <strong>
+              {s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '—'}
+            </strong>
             <em>{s?.recentGames ? `${s.recentGames} games` : ''}</em>
           </div>
         </div>
@@ -286,18 +349,31 @@ export function HomeBoard({
       {error && <p className="home-error">{error}</p>}
       {debriefLoading && <p className="home-error">Analyse du match…</p>}
 
-      {debrief && <DebriefPanel debrief={debrief} onClose={() => setDebrief(null)} />}
+      {debrief && (
+        <DebriefPanel debrief={debrief} auto={autoOpen} onClose={() => setDebrief(null)} />
+      )}
 
       <div className="home-history-head">
         <h3>HISTORIQUE</h3>
-        <span>{profile.matches.length} dernières · clic = debrief</span>
+        <span>
+          {profile.matches.length} parties · debrief auto à chaque game
+        </span>
       </div>
 
       <div className="match-list">
         {profile.matches.length === 0 ? (
-          <p className="home-empty-inline">Aucune partie récente trouvée via le client.</p>
+          <p className="home-empty-inline">
+            Aucune partie récente trouvée via le client. Relance League ou joue une partie — l’historique se remplit dès que LCU le publie.
+          </p>
         ) : (
-          profile.matches.map((m) => <MatchCard key={m.gameId} match={m} onOpen={openDebrief} />)
+          profile.matches.map((m) => (
+            <MatchCard
+              key={m.gameId}
+              match={m}
+              onOpen={openDebrief}
+              active={debrief?.gameId === m.gameId}
+            />
+          ))
         )}
       </div>
     </section>
