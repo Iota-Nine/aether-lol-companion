@@ -510,17 +510,30 @@ export async function buildMatchDebrief(
   gameId: number,
   youPuuid?: string | null,
 ): Promise<MatchDebrief | null> {
-  let game = await lcuGet<RawGame>(lockfile, `/lol-match-history/v1/games/${gameId}`)
-
   const mePuuid =
     youPuuid ||
     (await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner'))?.puuid ||
     null
   if (!mePuuid) return null
 
+  // Detail game : timeout plus long + plusieurs chemins LCU
+  let game: RawGame | null = null
+  const detailPaths = [
+    `/lol-match-history/v1/games/${gameId}`,
+    `/lol-match-history/v1/games/${gameId}/`,
+  ]
+  for (const path of detailPaths) {
+    game = await lcuGet<RawGame>(lockfile, path, 8000)
+    if (game?.participants?.length) break
+    game = null
+  }
+
   if (!game?.participants?.length) {
-    const list = await fetchRawMatchList(lockfile, mePuuid, 20)
-    game = list.find((g) => asNum(g.gameId) === gameId) || null
+    const list = await fetchRawMatchList(lockfile, mePuuid, 30)
+    game =
+      list.find((g) => asNum(g.gameId) === gameId) ||
+      list.find((g) => String(g.gameId) === String(gameId)) ||
+      null
   }
 
   if (!game?.participants?.length) return null

@@ -71,7 +71,11 @@ export function findLockfile(): LockfileData | null {
   return null
 }
 
-export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T | null> {
+export function lcuGet<T>(
+  lockfile: LockfileData,
+  endpoint: string,
+  timeoutMs = 2500,
+): Promise<T | null> {
   const auth = Buffer.from(`riot:${lockfile.password}`).toString('base64')
 
   return new Promise((resolve) => {
@@ -115,7 +119,7 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
     )
 
     req.on('error', () => resolve(null))
-    req.setTimeout(2500, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy()
       resolve(null)
     })
