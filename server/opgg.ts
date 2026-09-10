@@ -336,6 +336,18 @@ function parseOpggAnalysisText(text: string): {
   return { winRate, pickRate, banRate, tier, coreItems, boots, keystone, runePage, spells, skillOrder }
 }
 
+export function getCachedOpggBuild(
+  championKey: string,
+  position?: string | null,
+): OpggBuild | null {
+  const lane = normalizeLane(position)
+  const champ = toOpggChampionName(championKey)
+  const cacheKey = `${champ}:${lane}`
+  const hit = buildCache.get(cacheKey)
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.build
+  return null
+}
+
 export async function fetchOpggBuild(params: {
   championKey: string
   championId: number
