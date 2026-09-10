@@ -107,12 +107,16 @@ function PlayerSlot({
     player.championWinRate != null && player.championWinRate > 0 ? player.championWinRate : null
   const accountWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
-    : stats?.rankedWR ?? stats?.formScore ?? stats?.recentWR
+    : stats?.recentWR ?? stats?.formScore ?? stats?.rankedWR
   // En draft: privilégie le WR compte. En live: meta champ si dispo, sinon rien.
   const displayWr = inGame || live ? champMetaWr : accountWr ?? champMetaWr
   const wrLabel =
     !inGame && !live && accountWr != null
-      ? 'COMPTE'
+      ? stats?.rankedWR != null
+        ? 'COMPTE'
+        : stats?.recentWR != null
+          ? 'RECENT'
+          : 'COMPTE'
       : champMetaWr != null
         ? 'META'
         : accountWr != null
@@ -548,16 +552,21 @@ function LolBuildsPanel({
   secondary?: boolean
 }) {
   const [meta, setMeta] = useState<MetaGuides | null>(null)
+  const [cache, setCache] = useState<Partial<Record<LaneId, MetaGuides>>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    // Garde l'ancien contenu visible pendant le fetch (pas de flash vide)
     setLoading(true)
     setError(null)
     void fetchLaneMeta(lane, 7)
       .then((data) => {
-        if (!cancelled) setMeta(data)
+        if (!cancelled) {
+          setMeta(data)
+          setCache((prev) => ({ ...prev, [lane]: data }))
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur meta')
@@ -570,7 +579,13 @@ function LolBuildsPanel({
     }
   }, [lane])
 
-  const builds = meta?.lolBuilds?.length ? meta.lolBuilds : fallbackBuilds ?? []
+  const builds =
+    meta?.lolBuilds?.length
+      ? meta.lolBuilds
+      : cache[lane]?.lolBuilds?.length
+        ? cache[lane]!.lolBuilds
+        : fallbackBuilds ?? []
+  const patchNote = meta?.patchNote || cache[lane]?.patchNote
 
   return (
     <section
@@ -602,7 +617,7 @@ function LolBuildsPanel({
         ))}
       </div>
 
-      {meta?.patchNote && <p className="lane-meta-note">{meta.patchNote}</p>}
+      {patchNote && <p className="lane-meta-note">{patchNote}</p>}
       {error && <p className="lane-meta-error">{error}</p>}
       {loading && !builds.length && <p className="lane-meta-note">Chargement meta…</p>}
 

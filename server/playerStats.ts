@@ -44,7 +44,7 @@ function wr(wins: number, losses: number): number | null {
   return Number(((wins / total) * 100).toFixed(1))
 }
 
-/** Ne calcule un WR que si wins ET losses sont connus (évite wins=N losses=undefined → 100%). */
+/** Ne calcule un WR que si wins ET losses sont fiables (évite 48W 0L → 100% fantôme). */
 function wrFromQueue(q: RankedQueue | null | undefined): {
   rankedWR: number | null
   wins: number
@@ -57,6 +57,10 @@ function wrFromQueue(q: RankedQueue | null | undefined): {
   if (wins == null) return { rankedWR: null, wins: 0, losses: 0 }
   if (losses == null && games != null) losses = Math.max(0, games - wins)
   if (losses == null) return { rankedWR: null, wins, losses: 0 }
+  // LCU renvoie parfois losses:0 avec beaucoup de wins pour les autres joueurs
+  if (losses === 0 && wins >= 8) {
+    return { rankedWR: null, wins, losses }
+  }
   return { rankedWR: wr(wins, losses), wins, losses }
 }
 
@@ -239,6 +243,7 @@ export async function fetchPlayerStats(
     // Ignore recent WR trop peu fiable (< 5 games) pour le form score
     const recentReliable =
       form.recentGames >= 5 ? (mode === 'tft' ? top4 ?? form.recentWR : form.recentWR) : null
+    // Si ranked est absurde/absent, le recent porte le form score
     const pieces = [rankedWR, recentReliable].filter((v): v is number => v != null)
     const formScore =
       pieces.length > 0
@@ -259,8 +264,9 @@ export async function fetchPlayerStats(
       rankedWR,
       recentWR: form.recentWR,
       top4Rate: top4,
-      wins: rankedWins,
-      losses: rankedLosses,
+      // Ne pas afficher un palmarès 48W 0L trompeur
+      wins: rankedWR != null ? rankedWins : 0,
+      losses: rankedWR != null ? rankedLosses : 0,
       tier,
       division,
       lp: asInt(q?.leaguePoints),

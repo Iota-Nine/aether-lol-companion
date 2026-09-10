@@ -82,50 +82,89 @@ export async function buildLolGuides(
   return guides.sort((a, b) => b.winRate - a.winRate)
 }
 
-/** Top 7 meta d'une lane + builds. */
+/** Top 7 meta d'une lane + builds (cache + builds en parallèle). */
+const laneGuideCache = new Map<string, { at: number; data: MetaGuides }>()
+const LANE_CACHE_MS = 45 * 60 * 1000
+const laneInflight = new Map<string, Promise<MetaGuides>>()
+
 export async function buildLaneMetaGuides(
   lane: OpggLane,
   limit = 7,
 ): Promise<MetaGuides> {
-  const { patch, champs } = await fetchOpggLaneTop(lane, limit, 'euw')
-  const positions: Record<number, string> = {}
-  for (const c of champs) positions[c.championId] = lane
+  const cacheKey = `${lane}:${limit}`
+  const hit = laneGuideCache.get(cacheKey)
+  if (hit && Date.now() - hit.at < LANE_CACHE_MS) return hit.data
 
-  const guides: LolBuildGuide[] = []
-  for (const row of champs) {
-    const champ = await getChampionById(row.championId)
-    if (!champ) continue
-    const opgg = await fetchOpggBuild({
-      championId: champ.id,
-      championKey: champ.key,
-      position: lane,
-      region: 'euw',
-    })
-    guides.push({
-      championId: champ.id,
-      championName: champ.name,
-      championImage: champ.image,
-      role: lane.toUpperCase(),
-      winRate: opgg?.winRate || row.winRate,
-      pickRate: opgg?.pickRate || row.pickRate,
-      tier: opgg?.tier || row.tier,
-      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
-      boots: opgg?.boots || '-',
-      keystone: opgg?.keystone || '-',
-      tips: opgg?.tip || `Meta ${lane.toUpperCase()} · rank #${row.tierRank}`,
-      links: {
-        opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build?position=${lane}`,
-        uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
-      },
-    })
-  }
+  const pending = laneInflight.get(cacheKey)
+  if (pending) return pending
 
-  return {
-    mode: 'lol',
-    patchNote: `Top ${limit} ${lane.toUpperCase()} · patch ${patch} · ranked`,
-    lolBuilds: guides,
-    tftComps: [],
+  const job = (async () => {
+    const { patch, champs } = await fetchOpggLaneTop(lane, limit, 'euw')
+
+    // Builds en parallèle (MCP) — beaucoup plus rapide que séquentiel
+    const guides = (
+      await Promise.all(
+        champs.map(async (row) => {
+          const champ = await getChampionById(row.championId)
+          if (!champ) return null
+          const opgg = await fetchOpggBuild({
+            championId: champ.id,
+            championKey: champ.key,
+            position: lane,
+            region: 'euw',
+          })
+          const guide: LolBuildGuide = {
+            championId: champ.id,
+            championName: champ.name,
+            championImage: champ.image,
+            role: lane.toUpperCase(),
+            winRate: opgg?.winRate || row.winRate,
+            pickRate: opgg?.pickRate || row.pickRate,
+            tier: opgg?.tier || row.tier,
+            coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
+            boots: opgg?.boots || '-',
+            keystone: opgg?.keystone || '-',
+            tips: opgg?.tip || `Meta ${lane.toUpperCase()} · rank #${row.tierRank}`,
+            links: {
+              opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build?position=${lane}`,
+              uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
+            },
+          }
+          return guide
+        }),
+      )
+    ).filter((g): g is LolBuildGuide => g != null)
+
+    const data: MetaGuides = {
+      mode: 'lol',
+      patchNote: `Top ${limit} ${lane.toUpperCase()} · patch ${patch} · ranked`,
+      lolBuilds: guides,
+      tftComps: [],
+    }
+    laneGuideCache.set(cacheKey, { at: Date.now(), data })
+    return data
+  })()
+
+  laneInflight.set(cacheKey, job)
+  try {
+    return await job
+  } finally {
+    laneInflight.delete(cacheKey)
   }
+}
+
+/** Précharge les 5 lanes en arrière-plan pour un switch quasi instantané. */
+export function prefetchAllLaneMetas(limit = 7): void {
+  const lanes: OpggLane[] = ['top', 'jungle', 'mid', 'adc', 'support']
+  void Promise.all(
+    lanes.map(async (lane) => {
+      try {
+        await buildLaneMetaGuides(lane, limit)
+      } catch {
+        /* ignore prefetch errors */
+      }
+    }),
+  )
 }
 
 let tftCache: { loadedAt: number; setName: string; champs: TftChamp[]; comps: TftCompGuide[] } | null =

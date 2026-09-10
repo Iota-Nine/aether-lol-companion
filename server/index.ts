@@ -16,7 +16,7 @@ import {
   type LiveClientPlayer,
   type GameflowSession,
 } from './tft.js'
-import { buildMetaGuides, buildLaneMetaGuides } from './meta.js'
+import { buildMetaGuides, buildLaneMetaGuides, prefetchAllLaneMetas } from './meta.js'
 import type { LiveSession } from './types.js'
 import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
@@ -483,6 +483,7 @@ export async function startServer(port = Number(process.env.PORT) || 8787) {
   try {
     await loadChampions()
     console.log(`[aether] Champions chargés`)
+    prefetchAllLaneMetas(7)
   } catch (e) {
     console.warn('[aether] Chargement champions différé:', e)
   }
