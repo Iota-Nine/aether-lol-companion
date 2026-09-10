@@ -455,7 +455,7 @@ export async function fetchMatchSummaries(
   return out
 }
 
-function gradePlayer(p: {
+function computePlayerScore(p: {
   kills: number
   deaths: number
   assists: number
@@ -465,60 +465,74 @@ function gradePlayer(p: {
   teamAvgGold: number
   teamAvgDmg: number
   teamAvgDeaths: number
-}): { grade: DebriefPlayer['grade']; score: number; verdict: string } {
+}): number {
   const kda = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths
   const goldRatio = p.teamAvgGold > 0 ? p.gold / p.teamAvgGold : 1
   const dmgRatio = p.teamAvgDmg > 0 ? p.damage / p.teamAvgDmg : 1
   const deathRatio = p.teamAvgDeaths > 0 ? p.deaths / p.teamAvgDeaths : 1
 
   let score = 50
-  score += Math.min(25, kda * 6)
-  score += (goldRatio - 1) * 20
-  score += (dmgRatio - 1) * 20
-  score -= (deathRatio - 1) * 18
-  if (p.deaths >= 8 && kda < 1.2) score -= 15
-  if (p.cs < 40 && p.gold < p.teamAvgGold * 0.55) score -= 12
-  score = Math.max(0, Math.min(100, Math.round(score)))
+  score += Math.min(28, kda * 5.5)
+  score += (goldRatio - 1) * 18
+  score += (dmgRatio - 1) * 16
+  score -= (deathRatio - 1) * 14
+  // Pénalité morte nette: un 8/7 ne doit pas passer pour un carry face à un 10/3
+  score -= Math.max(0, p.deaths - 4) * 2.2
+  if (p.deaths >= 8 && kda < 1.2) score -= 12
+  if (p.cs < 40 && p.gold < p.teamAvgGold * 0.55) score -= 10
+  return Math.max(0, Math.min(100, Math.round(score)))
+}
 
-  if (p.deaths >= 9 && kda < 1 && goldRatio < 0.85) {
+function gradeFromScore(p: {
+  kills: number
+  deaths: number
+  assists: number
+  gold: number
+  damage: number
+  cs: number
+  teamAvgGold: number
+  teamAvgDmg: number
+  score: number
+  rankOnTeam: number
+}): { grade: DebriefPlayer['grade']; verdict: string } {
+  const kda = p.deaths === 0 ? p.kills + p.assists : (p.kills + p.assists) / p.deaths
+  const goldRatio = p.teamAvgGold > 0 ? p.gold / p.teamAvgGold : 1
+  const dmgRatio = p.teamAvgDmg > 0 ? p.damage / p.teamAvgDmg : 1
+
+  if (p.deaths >= 9 && kda < 1 && goldRatio < 0.9) {
     return {
       grade: 'FEED',
-      score,
       verdict: `Feed dur (${p.kills}/${p.deaths}/${p.assists}). Gros trou d'XP/or pour l'équipe.`,
     }
   }
-  if (p.deaths >= 6 && kda < 1.3 && dmgRatio < 0.75) {
+  if (p.deaths >= 7 && kda < 1.35 && dmgRatio < 0.8 && p.score < 52) {
     return {
       grade: 'INT',
-      score,
-      verdict: `A merdé : trop de morts (${p.deaths}) pour trop peu d’impact.`,
+      verdict: `Trop de morts (${p.deaths}) pour trop peu d’impact.`,
     }
   }
-  if (p.cs < 50 && p.gold < p.teamAvgGold * 0.6 && p.damage < p.teamAvgDmg * 0.55) {
+  if (p.cs < 50 && p.gold < p.teamAvgGold * 0.6 && p.damage < p.teamAvgDmg * 0.55 && p.score < 48) {
     return {
       grade: 'GHOST',
-      score,
       verdict: `Fantôme de la map, quasi aucun farm ni dégâts.`,
     }
   }
-  if (kda >= 3 && (goldRatio >= 1.15 || dmgRatio >= 1.2)) {
+  // Un seul CARRY par équipe: le #1 au score, avec un plancher
+  if (p.rankOnTeam === 0 && p.score >= 65) {
     return {
       grade: 'CARRY',
-      score,
       verdict: `Carry clair (KDA ${kda.toFixed(1)}). A porté les fights / l'économie.`,
     }
   }
-  if (score >= 55) {
+  if (p.score >= 55) {
     return {
       grade: 'SOLID',
-      score,
-      verdict: `Propre : rôle tenu, pas le problème principal.`,
+      verdict: `Presta propre (KDA ${kda.toFixed(1)}). Rôle tenu.`,
     }
   }
   return {
     grade: 'MEH',
-    score,
-    verdict: `Moyen, ni carry ni int, impact limité.`,
+    verdict: `Impact moyen (KDA ${kda.toFixed(1)}).`,
   }
 }
 
@@ -567,22 +581,60 @@ export async function buildMatchDebrief(
   const yourTeamId = you.teamId
   const youWon = you.win
   const allyRows = parts.filter((p) => p.teamId === yourTeamId)
+  const enemyRows = parts.filter((p) => p.teamId !== yourTeamId)
   const avg = (list: NormPart[], key: keyof NormPart) =>
     list.length ? list.reduce((s, r) => s + (Number(r[key]) || 0), 0) / list.length : 0
 
+  type Scored = {
+    part: NormPart
+    score: number
+    teamAvgGold: number
+    teamAvgDmg: number
+  }
+  const scored: Scored[] = parts.map((r) => {
+    const teamRows = r.teamId === yourTeamId ? allyRows : enemyRows
+    const teamAvgGold = avg(teamRows, 'gold')
+    const teamAvgDmg = avg(teamRows, 'damage')
+    const teamAvgDeaths = avg(teamRows, 'deaths')
+    return {
+      part: r,
+      score: computePlayerScore({
+        kills: r.kills,
+        deaths: r.deaths,
+        assists: r.assists,
+        gold: r.gold,
+        damage: r.damage,
+        cs: r.cs,
+        teamAvgGold,
+        teamAvgDmg,
+        teamAvgDeaths,
+      }),
+      teamAvgGold,
+      teamAvgDmg,
+    }
+  })
+
+  const rankOnTeam = (row: Scored) => {
+    const same = scored
+      .filter((x) => x.part.teamId === row.part.teamId)
+      .sort((a, b) => b.score - a.score)
+    return same.findIndex((x) => x.part === row.part)
+  }
+
   const players: DebriefPlayer[] = []
-  for (const r of parts) {
-    const teamRows = r.teamId === yourTeamId ? allyRows : parts.filter((x) => x.teamId !== yourTeamId)
-    const g = gradePlayer({
+  for (const row of scored) {
+    const r = row.part
+    const g = gradeFromScore({
       kills: r.kills,
       deaths: r.deaths,
       assists: r.assists,
       gold: r.gold,
       damage: r.damage,
       cs: r.cs,
-      teamAvgGold: avg(teamRows, 'gold'),
-      teamAvgDmg: avg(teamRows, 'damage'),
-      teamAvgDeaths: avg(teamRows, 'deaths'),
+      teamAvgGold: row.teamAvgGold,
+      teamAvgDmg: row.teamAvgDmg,
+      score: row.score,
+      rankOnTeam: rankOnTeam(row),
     })
     const champ = r.championId ? await getChampionById(r.championId) : null
     const isYou =
@@ -608,9 +660,9 @@ export async function buildMatchDebrief(
       isYou,
       grade: g.grade,
       verdict: isYou
-        ? g.verdict.replace(/^A /, 'Tu as ').replace(/^Fantôme/, 'Tu étais un fantôme')
+        ? g.verdict.replace(/^Trop de/, 'Tu as trop de').replace(/^Fantôme/, 'Tu étais un fantôme').replace(/^Feed/, 'Tu as feed').replace(/^Carry/, 'Tu as carry').replace(/^Presta/, 'Presta').replace(/^Impact/, 'Impact')
         : g.verdict,
-      score: g.score,
+      score: row.score,
     })
   }
 
@@ -620,11 +672,14 @@ export async function buildMatchDebrief(
   })
 
   const ally = players.filter((p) => p.team === 'ally')
-  const mvp = ally.find((p) => p.grade === 'CARRY') || [...ally].sort((a, b) => b.score - a.score)[0] || null
+  const enemy = players.filter((p) => p.team === 'enemy')
+  // MVP = meilleur score allié (plus le premier tag CARRY au hasard)
+  const mvp = [...ally].sort((a, b) => b.score - a.score)[0] || null
   const intFeed =
     ally.find((p) => p.grade === 'FEED' || p.grade === 'INT') ||
     [...ally].sort((a, b) => a.score - b.score)[0] ||
     null
+  const enemyCarry = [...enemy].sort((a, b) => b.score - a.score)[0] || null
 
   const why: string[] = []
   if (youWon) {
@@ -635,8 +690,7 @@ export async function buildMatchDebrief(
     if (intFeed && (intFeed.grade === 'FEED' || intFeed.grade === 'INT' || intFeed.score < 40)) {
       why.push(`Point faible : ${intFeed.gameName} (${intFeed.championName}): ${intFeed.verdict}`)
     }
-    const enemyCarry = players.find((p) => p.team === 'enemy' && p.grade === 'CARRY')
-    if (enemyCarry) {
+    if (enemyCarry && enemyCarry.score >= 65) {
       why.push(`Ils ont été portés par ${enemyCarry.gameName} (${enemyCarry.championName}).`)
     }
   }
@@ -645,7 +699,11 @@ export async function buildMatchDebrief(
   if (youCard) why.push(`Toi (${youCard.championName}) : ${youCard.verdict}`)
 
   const headline = youWon
-    ? `WIN: ${mvp ? `${mvp.championName} a carry` : 'équipe propre'}`
+    ? mvp && (mvp.grade === 'CARRY' || mvp.score >= 70)
+      ? `WIN: ${mvp.championName} a carry`
+      : mvp
+        ? `WIN: ${mvp.championName} en tête`
+        : 'WIN: équipe propre'
     : `LOSS: ${intFeed && intFeed.score < 45 ? `${intFeed.championName} a plombé la game` : 'manque d’impact collectif'}`
 
   return {
