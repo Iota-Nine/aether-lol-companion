@@ -9,6 +9,9 @@ import type { LockfileData } from './types.js'
 const LEAGUE_LOCKFILE_CANDIDATES = [
   'C:\\Riot Games\\League of Legends\\lockfile',
   'D:\\Riot Games\\League of Legends\\lockfile',
+  'E:\\Riot Games\\League of Legends\\lockfile',
+  'F:\\Riot Games\\League of Legends\\lockfile',
+  path.join(process.env['PROGRAMFILES'] ?? 'C:\\Program Files', 'Riot Games', 'League of Legends', 'lockfile'),
   path.join(process.env['LOCALAPPDATA'] ?? '', 'Riot Games', 'League of Legends', 'lockfile'),
   path.join(os.homedir(), 'Library', 'Application Support', 'League of Legends', 'lockfile'),
   path.join(os.homedir(), '.local', 'share', 'League of Legends', 'lockfile'),
@@ -54,7 +57,25 @@ function findFromLeagueProcess(): LockfileData | null {
       protocol: 'https',
     }
   } catch {
-    return null
+    // Fallback wmic (anciens Windows)
+    try {
+      const out = execSync(
+        'wmic process where "name=\'LeagueClientUx.exe\'" get CommandLine /value',
+        { encoding: 'utf8', timeout: 4000, windowsHide: true },
+      )
+      const port = out.match(/--app-port=(\d+)/i)?.[1]
+      const password = out.match(/--remoting-auth-token=([^\s"]+)/i)?.[1]
+      if (!port || !password) return null
+      return {
+        name: 'LeagueClientUx',
+        pid: 0,
+        port: Number(port),
+        password: password.replace(/"/g, ''),
+        protocol: 'https',
+      }
+    } catch {
+      return null
+    }
   }
 }
 

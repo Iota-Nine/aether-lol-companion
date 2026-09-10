@@ -161,7 +161,6 @@ async function toPlayerCard(
 
 export async function buildLiveSession(params: {
   connected: boolean
-  demo: boolean
   phase: string
   region: string
   message: string
@@ -176,7 +175,7 @@ export async function buildLiveSession(params: {
     return {
       connected: params.connected,
       phase: params.phase,
-      demo: params.demo,
+      demo: false,
       mode: 'lol',
       queueName: 'LoL',
       region,
@@ -240,7 +239,7 @@ export async function buildLiveSession(params: {
   return {
     connected: params.connected,
     phase: params.phase,
-    demo: params.demo,
+    demo: false,
     mode: 'lol',
     queueName: 'LoL Draft',
     region,

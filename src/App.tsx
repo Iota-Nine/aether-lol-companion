@@ -1080,7 +1080,9 @@ export default function App() {
           </span>
           <p>
             {live?.message ??
-              'Mode meta solo: choisis une lane (TOP / JGL / MID / ADC / SUP). League n’est pas requis.'}
+              (live?.connected
+                ? 'Connecté au client League.'
+                : 'Ouvre League of Legends. AETHER se branche tout seul, sans mode démo.')}
           </p>
         </div>
         <div className="status-feed">

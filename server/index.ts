@@ -5,7 +5,6 @@ import fs from 'node:fs'
 import { findLockfile, lcuGet, liveClientGet } from './lcu.js'
 import { loadChampions, getAllChampions, getChampionById } from './champions.js'
 import { buildLiveSession, type LcuChampSelectSession } from './session.js'
-import { createDemoChampSelect } from './demo.js'
 import { normalizeRegion, isTftQueue, queueLabel } from './profiles.js'
 import {
   buildTftLobbySession,
@@ -108,18 +107,12 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
 
 export function createApp() {
   const app = express()
-  let forceDemo = process.env.FORCE_DEMO === '1'
 
   app.use(cors())
   app.use(express.json())
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, forceDemo })
-  })
-
-  app.post('/api/demo', (req, res) => {
-    forceDemo = Boolean(req.body?.enabled)
-    res.json({ forceDemo })
+    res.json({ ok: true })
   })
 
   app.get('/api/champions', async (_req, res) => {
@@ -223,25 +216,6 @@ export function createApp() {
     try {
       await loadChampions()
 
-      if (forceDemo || req.query.demo === '1') {
-        const session = createDemoChampSelect()
-        const live = await buildLiveSession({
-          connected: true,
-          demo: true,
-          phase: 'ChampSelect',
-          region: 'euw',
-          message: 'Mode démo, données fictives.',
-          session,
-          currentSummoner: {
-            gameName: 'NissaMain',
-            tagLine: 'EUW',
-            displayName: 'NissaMain#EUW',
-          },
-        })
-        res.json(await withGuides(live))
-        return
-      }
-
       const lockfile = findLockfile()
       if (!lockfile) {
         res.json(
@@ -252,7 +226,7 @@ export function createApp() {
               region: 'euw',
               mode: 'idle',
               message:
-                'Mode meta solo, League non requis. Choisis une lane pour le top 7.',
+                'Ouvre le client League (pas juste Riot Client). Dès que LoL tourne, AETHER se connecte tout seul.',
             }),
           ),
         )
@@ -392,7 +366,6 @@ export function createApp() {
       if (champSelect?.myTeam?.length || champSelect?.theirTeam?.length) {
         const live = await buildLiveSession({
           connected: true,
-          demo: false,
           phase,
           region,
           message: 'Champion select LoL détecté: alliés, ennemis et picks synchronisés.',
