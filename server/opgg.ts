@@ -1,4 +1,4 @@
-/** Client OP.GG — meta champions + builds (API publique + MCP officiel OP.GG). */
+/** Client OP.GG - meta champions + builds (API publique + MCP officiel OP.GG). */
 
 export type OpggLane = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 
@@ -96,7 +96,7 @@ function pct(v: number | null | undefined): number {
 }
 
 function tierLabel(tier: number | null | undefined): string {
-  if (!tier) return '—'
+  if (!tier) return '-'
   return TIER_LABEL[tier] ?? String(tier)
 }
 
@@ -162,7 +162,7 @@ export async function fetchOpggRankedMeta(region = 'euw'): Promise<{
     ['adc', []],
     ['support', []],
   ])
-  const patch = payload?.meta?.version || '—'
+  const patch = payload?.meta?.version || '-'
 
   for (const row of payload?.data ?? []) {
     const id = row.id
@@ -305,13 +305,13 @@ function parseOpggAnalysisText(text: string): {
   const bootsList = coreBlocks[1] ? parseQuotedList(coreBlocks[1]) : []
   const bootsMatch = text.match(/Boots\(\[([^\]]*)\]/)
   const boots = bootsMatch
-    ? parseQuotedList(bootsMatch[1] || '')[0] || '—'
-    : bootsList[0] || '—'
+    ? parseQuotedList(bootsMatch[1] || '')[0] || '-'
+    : bootsList[0] || '-'
 
   const runes = text.match(/Runes\("([^"]+)",\[([^\]]*)\]/)
   const runeNames = runes ? parseQuotedList(`[${runes[2]}]`) : []
-  const keystone = runeNames[0] || '—'
-  const runePage = runes?.[1] || '—'
+  const keystone = runeNames[0] || '-'
+  const runePage = runes?.[1] || '-'
 
   const spellsMatch = text.match(/SummonerSpells\(\[([^\]]*)\]/)
   // spells may be ids; names preferred if present as strings
@@ -394,14 +394,14 @@ export async function fetchOpggBuild(params: {
       winRate: parsed.winRate || ranked?.winRate || 0,
       pickRate: parsed.pickRate || ranked?.pickRate || 0,
       banRate: parsed.banRate || ranked?.banRate || 0,
-      tier: parsed.tier !== '—' ? parsed.tier : ranked?.tier || '—',
+      tier: parsed.tier !== '-' ? parsed.tier : ranked?.tier || '-',
       coreItems: parsed.coreItems.slice(0, 4),
       boots: parsed.boots,
       keystone: parsed.keystone,
       runePage: parsed.runePage,
       spells: parsed.spells.slice(0, 2),
       skillOrder: parsed.skillOrder.slice(0, 6),
-      tip: `Source OP.GG · patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
+      tip: `Source OP.GG patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
       patch: meta.patch,
       source: 'op.gg',
     }
@@ -419,9 +419,9 @@ export async function fetchOpggBuild(params: {
       banRate: ranked.banRate,
       tier: ranked.tier,
       coreItems: [],
-      boots: '—',
-      keystone: '—',
-      runePage: '—',
+      boots: '-',
+      keystone: '-',
+      runePage: '-',
       spells: [],
       skillOrder: [],
       tip: `WR/PR OP.GG patch ${meta.patch} (build détaillé indisponible)`,

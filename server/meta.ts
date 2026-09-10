@@ -64,13 +64,13 @@ export async function buildLolGuides(
       championId: champ.id,
       championName: champ.name,
       championImage: champ.image,
-      role: opgg?.role || '—',
+      role: opgg?.role || '-',
       winRate: opgg?.winRate || champ.winRate,
       pickRate: opgg?.pickRate || champ.pickRate,
       tier: opgg?.tier || champ.tier,
-      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['—'],
-      boots: opgg?.boots || '—',
-      keystone: opgg?.keystone || '—',
+      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
+      boots: opgg?.boots || '-',
+      keystone: opgg?.keystone || '-',
       tips: opgg?.tip || 'Données OP.GG indisponibles pour ce champion',
       links: {
         opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build`,
@@ -109,9 +109,9 @@ export async function buildLaneMetaGuides(
       winRate: opgg?.winRate || row.winRate,
       pickRate: opgg?.pickRate || row.pickRate,
       tier: opgg?.tier || row.tier,
-      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['—'],
-      boots: opgg?.boots || '—',
-      keystone: opgg?.keystone || '—',
+      coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
+      boots: opgg?.boots || '-',
+      keystone: opgg?.keystone || '-',
       tips: opgg?.tip || `Meta OP.GG ${lane.toUpperCase()} · rank #${row.tierRank}`,
       links: {
         opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build?position=${lane}`,
@@ -275,7 +275,7 @@ export async function buildMetaGuides(params: {
   const patch = await getOpggPatch()
   return {
     mode: 'lol',
-    patchNote: `Meta OP.GG · patch ${patch} · ranked Platinum+ (EUW)`,
+    patchNote: `Meta OP.GG patch ${patch} · ranked Platinum+ (EUW)`,
     lolBuilds,
     tftComps: [],
   }
