@@ -217,6 +217,13 @@ export interface DebriefPlayer {
   cs: number
   gold: number
   damage: number
+  damageTurrets: number
+  damageObjectives: number
+  damageTaken: number
+  mitigated: number
+  heal: number
+  shield: number
+  cc: number
   vision: number
   items: number[]
   win: boolean

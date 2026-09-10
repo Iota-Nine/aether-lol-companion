@@ -193,7 +193,7 @@ export async function buildTftFromGameflow(params: {
     enemies: [],
     players,
     teamWinChance: { ally: 50, enemy: 50 },
-    message: `TFT en cours — ${players.length} joueurs · ${qLabel}`,
+    message: `TFT en cours: ${players.length} joueurs · ${qLabel}`,
   }
 }
 
@@ -273,9 +273,9 @@ export function buildTftLobbySession(params: {
 
   const inGame = Boolean(params.inGamePlayers?.length)
   const message = inGame
-    ? `TFT en cours — ${players.length} joueurs détectés (${qLabel}).`
+    ? `TFT en cours: ${players.length} joueurs détectés (${qLabel}).`
     : players.length
-      ? `Lobby TFT détecté — ${players.length} joueur(s) · ${qLabel}.`
+      ? `Lobby TFT détecté: ${players.length} joueur(s) · ${qLabel}.`
       : `Mode TFT actif (${qLabel}). En attente des joueurs…`
 
   return {

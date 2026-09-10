@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { findLockfile, lcuGet, liveClientGet } from './lcu.js'
 import { loadChampions, getAllChampions, getChampionById } from './champions.js'
-import { buildLiveSession, type LcuChampSelectSession, type LcuSummoner } from './session.js'
+import { buildLiveSession, type LcuChampSelectSession } from './session.js'
 import { createDemoChampSelect } from './demo.js'
 import { normalizeRegion, isTftQueue, queueLabel } from './profiles.js'
 import {
@@ -22,6 +22,7 @@ import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
 import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
 import { buildProfileHome, buildMatchDebrief, buildLatestDebrief } from './history.js'
+import { resolveCurrentSummoner } from './summoner.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
   try {
@@ -89,7 +90,7 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
       const lol = await buildMetaGuides({ mode: 'lol', championIds: [] })
       live.guides = {
         mode: 'lol',
-        patchNote: 'Suggestions meta OP.GG (en attente de lobby LoL)',
+        patchNote: 'Suggestions meta (en attente de lobby LoL)',
         lolBuilds: lol.lolBuilds.slice(0, 7),
         tftComps: tft.tftComps,
       }
@@ -224,7 +225,7 @@ export function createApp() {
           demo: true,
           phase: 'ChampSelect',
           region: 'euw',
-          message: 'Mode démo — données fictives.',
+          message: 'Mode démo, données fictives.',
           session,
           currentSummoner: {
             gameName: 'NissaMain',
@@ -246,7 +247,7 @@ export function createApp() {
               region: 'euw',
               mode: 'idle',
               message:
-                'Mode meta solo — League non requis. Choisis une lane pour le top 7 OP.GG.',
+                'Mode meta solo, League non requis. Choisis une lane pour le top 7.',
             }),
           ),
         )
@@ -266,10 +267,7 @@ export function createApp() {
       )
       const region = normalizeRegion(regionData?.webRegion || regionData?.region || 'euw')
 
-      const currentSummoner = await lcuGet<LcuSummoner>(
-        lockfile,
-        '/lol-summoner/v1/current-summoner',
-      )
+      const currentSummoner = await resolveCurrentSummoner(lockfile)
 
       const lobby = await lcuGet<LobbyPayload>(lockfile, '/lol-lobby/v2/lobby')
       const queueId = lobby?.gameConfig?.queueId ?? gameflow?.gameData?.queue?.id
@@ -281,7 +279,7 @@ export function createApp() {
         ? await liveClientGet<LiveClientPlayer[]>('/liveclientdata/playerlist')
         : null
 
-      // ── LoL EN PARTIE (Live Client 2999) — priorité Porofessor-like ──
+      // ── LoL EN PARTIE (Live Client 2999) ──
       if (inGame && !tft) {
         const flowPlayers = [
           ...(gameflow?.gameData?.teamOne ?? []),
@@ -308,7 +306,7 @@ export function createApp() {
             summonerName: `${gameName}#${tagLine}`,
             gameName,
             tagLine,
-            assignedPosition: '—',
+            assignedPosition: '-',
             championId: raw.championId ?? null,
             championName: null,
             championKey: null,
@@ -392,7 +390,7 @@ export function createApp() {
           demo: false,
           phase,
           region,
-          message: 'Champion select LoL détecté — alliés, ennemis et picks synchronisés.',
+          message: 'Champion select LoL détecté: alliés, ennemis et picks synchronisés.',
           session: champSelect,
           currentSummoner,
           lockfile,
@@ -446,8 +444,8 @@ export function createApp() {
             mode: lobby ? 'lol' : 'idle',
             queueName: queueLabel(queueId, gameMode),
             message: you
-              ? `Connecté (${you}). Meta OP.GG dispo — le draft s’affichera en champ select.`
-              : 'Client détecté. Meta OP.GG dispo sans partie — le live s’active au draft.',
+              ? `Connecté (${you}). Meta dispo, le draft s’affichera en champ select.`
+              : 'Client détecté. Meta dispo sans partie, le live s’active au draft.',
           }),
           lockfile,
         ),

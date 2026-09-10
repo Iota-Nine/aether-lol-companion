@@ -150,7 +150,7 @@ function stopOverlayKeepAlive() {
 
 function createOverlayWindow() {
   if (overlayWindow && !overlayWindow.isDestroyed()) {
-    // Ne JAMAIS focus() — ça descend League / vole le clavier
+    // Ne JAMAIS focus() - ça descend League / vole le clavier
     overlayWindow.showInactive()
     forceTopmost(overlayWindow)
     startOverlayKeepAlive()
@@ -266,7 +266,7 @@ function createWindow() {
     backgroundColor: '#05070c',
     show: false,
     autoHideMenuBar: true,
-    title: 'AETHER — LoL Companion',
+    title: 'AETHER LoL Companion',
     frame: false,
     titleBarStyle: 'hidden',
     icon: path.join(__dirname, 'icon.png'),

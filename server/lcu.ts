@@ -20,7 +20,7 @@ function parseLockfile(filePath: string): LockfileData | null {
     const raw = fs.readFileSync(filePath, 'utf8').trim()
     const [name, pid, port, password, protocol] = raw.split(':')
     if (!name || !pid || !port || !password || !protocol) return null
-    // Ignore Riot Client remoting lockfile — on veut LeagueClient
+    // Ignore Riot Client remoting lockfile - on veut LeagueClient
     if (name.toLowerCase().includes('riot')) return null
     return {
       name,
@@ -71,7 +71,11 @@ export function findLockfile(): LockfileData | null {
   return null
 }
 
-export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T | null> {
+export function lcuGet<T>(
+  lockfile: LockfileData,
+  endpoint: string,
+  timeoutMs = 2500,
+): Promise<T | null> {
   const auth = Buffer.from(`riot:${lockfile.password}`).toString('base64')
 
   return new Promise((resolve) => {
@@ -115,7 +119,7 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
     )
 
     req.on('error', () => resolve(null))
-    req.setTimeout(2500, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy()
       resolve(null)
     })
@@ -123,7 +127,7 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
   })
 }
 
-/** Live Client Data API (en partie uniquement) — port 2999 */
+/** Live Client Data API (en partie uniquement) - port 2999 */
 export function liveClientGet<T>(endpoint: string): Promise<T | null> {
   const tryOnce = (protocol: 'https' | 'http') =>
     new Promise<T | null>((resolve) => {
