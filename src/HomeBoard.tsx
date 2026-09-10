@@ -64,7 +64,10 @@ function DebriefPanel({
   const enemies = debrief.players.filter((p) => p.team === 'enemy')
 
   return (
-    <section className={`debrief-panel ${debrief.win ? 'win' : 'loss'} ${auto ? 'auto' : ''}`}>
+    <section
+      id="aether-debrief"
+      className={`debrief-panel ${debrief.win ? 'win' : 'loss'} ${auto ? 'auto' : ''}`}
+    >
       <header className="debrief-head">
         <div>
           <span className="debrief-kicker">
@@ -169,6 +172,51 @@ function MatchCard({
 }
 
 const SEEN_KEY = 'aether:lastDebriefGameId'
+const LATEST_KEY = 'aether:latestKnownGameId'
+
+function debriefFromSummary(match: MatchSummary): MatchDebrief {
+  const grade = match.autoGrade || 'MEH'
+  const verdict = match.autoVerdict || 'Pas le détail complet, juste tes stats.'
+  const you: MatchDebrief['players'][number] = {
+    gameName: 'TOI',
+    tagLine: '',
+    team: 'ally',
+    championId: match.championId,
+    championName: match.championName,
+    championImage: match.championImage,
+    kills: match.kills,
+    deaths: match.deaths,
+    assists: match.assists,
+    cs: match.cs,
+    gold: match.gold,
+    damage: 0,
+    vision: 0,
+    items: match.items,
+    win: match.win,
+    isYou: true,
+    grade,
+    verdict,
+    score: grade === 'CARRY' ? 80 : grade === 'FEED' || grade === 'INT' ? 25 : 55,
+  }
+
+  return {
+    gameId: match.gameId,
+    win: match.win,
+    gameDuration: match.gameDuration,
+    queueLabel: match.queueLabel,
+    headline: match.win
+      ? `WIN: ${match.championName} · ${grade}`
+      : `LOSS: ${match.championName} · ${grade}`,
+    why: [
+      match.win ? 'Victoire enregistrée sur ton compte.' : 'Défaite enregistrée sur ton compte.',
+      `Toi (${match.championName}) : ${verdict}`,
+      'Pas le détail complet de toute l’équipe, juste ton side perso.',
+    ],
+    players: [you],
+    mvp: match.win ? `TOI · ${match.championName}` : null,
+    intFeed: !match.win && (grade === 'FEED' || grade === 'INT') ? `TOI · ${match.championName}` : null,
+  }
+}
 
 export function HomeBoard({
   connected,
@@ -183,45 +231,70 @@ export function HomeBoard({
   const [debrief, setDebrief] = useState<MatchDebrief | null>(null)
   const [debriefLoading, setDebriefLoading] = useState(false)
   const [autoOpen, setAutoOpen] = useState(false)
-  const seenRef = useRef<number | null>(null)
+  const latestKnownRef = useRef<number | null>(null)
+  const userPinnedRef = useRef(false)
   const retryRef = useRef<number | null>(null)
+  const matchesRef = useRef<MatchSummary[]>([])
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(SEEN_KEY)
-      seenRef.current = raw ? Number(raw) : null
+      const raw = sessionStorage.getItem(LATEST_KEY)
+      latestKnownRef.current = raw ? Number(raw) : null
     } catch {
-      seenRef.current = null
+      latestKnownRef.current = null
     }
   }, [])
 
-  const rememberDebrief = (gameId: number) => {
-    seenRef.current = gameId
+  const rememberLatest = (gameId: number) => {
+    latestKnownRef.current = gameId
     try {
+      sessionStorage.setItem(LATEST_KEY, String(gameId))
       sessionStorage.setItem(SEEN_KEY, String(gameId))
     } catch {
       /* ignore */
     }
   }
 
-  const loadDebrief = useCallback(async (gameId: number | 'latest', markAuto = false) => {
-    setDebriefLoading(true)
-    try {
-      const d = gameId === 'latest' ? await fetchLatestDebrief() : await fetchMatchDebrief(gameId)
-      setDebrief(d)
-      setAutoOpen(markAuto)
-      rememberDebrief(d.gameId)
-      setError(null)
-      return d
-    } catch (e) {
-      if (!markAuto) {
-        setError(e instanceof Error ? e.message : 'Debrief impossible')
-      }
-      return null
-    } finally {
-      setDebriefLoading(false)
-    }
+  const showDebrief = useCallback((d: MatchDebrief, markAuto: boolean) => {
+    setDebrief(d)
+    setAutoOpen(markAuto)
+    setError(null)
+    window.requestAnimationFrame(() => {
+      document.getElementById('aether-debrief')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
   }, [])
+
+  const loadDebrief = useCallback(
+    async (gameId: number | 'latest', markAuto = false, matchHint?: MatchSummary | null) => {
+      setDebriefLoading(true)
+      try {
+        const d = gameId === 'latest' ? await fetchLatestDebrief() : await fetchMatchDebrief(gameId)
+        showDebrief(d, markAuto)
+        if (markAuto) rememberLatest(d.gameId)
+        return d
+      } catch (e) {
+        // Fallback : debrief perso depuis la carte historique (clic toujours utile)
+        const hint =
+          matchHint ||
+          (typeof gameId === 'number'
+            ? matchesRef.current.find((m) => m.gameId === gameId) || null
+            : matchesRef.current[0] || null)
+        if (hint) {
+          const local = debriefFromSummary(hint)
+          showDebrief(local, markAuto)
+          if (markAuto) rememberLatest(local.gameId)
+          return local
+        }
+        if (!markAuto) {
+          setError(e instanceof Error ? e.message : 'Debrief impossible')
+        }
+        return null
+      } finally {
+        setDebriefLoading(false)
+      }
+    },
+    [showDebrief],
+  )
 
   const refresh = useCallback(async () => {
     if (!connected) {
@@ -231,17 +304,32 @@ export function HomeBoard({
     }
     try {
       const data = await fetchProfile()
-      if (!data.connected) {
+      if (!data.connected || !data.gameName) {
         setProfile(null)
-        setError(null)
+        setError('Invocateur LCU pas encore prêt. Réessai auto…')
         return
       }
       setProfile(data)
+      matchesRef.current = data.matches || []
       setError(null)
 
       const latest = data.matches?.[0]
-      if (latest && latest.gameId !== seenRef.current) {
-        void loadDebrief(latest.gameId, true)
+      if (!latest) return
+
+      // Première sync : mémorise sans forcer si l’user regarde déjà un match
+      if (latestKnownRef.current == null) {
+        rememberLatest(latest.gameId)
+        if (!userPinnedRef.current) {
+          void loadDebrief(latest.gameId, true, latest)
+        }
+        return
+      }
+
+      // Vraie nouvelle game seulement → auto debrief (n’écrase pas un clic manuel sur une old game)
+      if (latest.gameId !== latestKnownRef.current) {
+        userPinnedRef.current = false
+        rememberLatest(latest.gameId)
+        void loadDebrief(latest.gameId, true, latest)
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Profil indisponible')
@@ -253,15 +341,17 @@ export function HomeBoard({
   useEffect(() => {
     void refresh()
     if (!connected) return
-    const id = window.setInterval(() => void refresh(), 12_000)
+    // Lobby: poll plus souvent tant que le profil n’est pas là
+    const id = window.setInterval(() => void refresh(), profile ? 12_000 : 3000)
     return () => window.clearInterval(id)
-  }, [refresh, connected])
+  }, [refresh, connected, profile])
 
   // Fin de game : retry agressif jusqu’à ce que LCU livre le match
   useEffect(() => {
     if (!forceLatestDebrief || !connected) return
     let cancelled = false
     let tries = 0
+    userPinnedRef.current = false
 
     const tick = async () => {
       if (cancelled) return
@@ -280,14 +370,16 @@ export function HomeBoard({
   }, [forceLatestDebrief, connected, loadDebrief])
 
   const openDebrief = (gameId: number) => {
-    void loadDebrief(gameId, false)
+    userPinnedRef.current = true
+    const hint = matchesRef.current.find((m) => m.gameId === gameId) || null
+    void loadDebrief(gameId, false, hint)
   }
 
   if (!connected) {
     return (
       <section className="home-empty">
         <h2>SCOUT META</h2>
-        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon, scrappe la meta OP.GG ci-dessous.</p>
+        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon tu peux quand même checker la meta en bas.</p>
       </section>
     )
   }
@@ -304,7 +396,10 @@ export function HomeBoard({
     return (
       <section className="home-empty">
         <h2>COMPTE</h2>
-        <p>{error || 'Impossible de lire ton invocateur LCU.'}</p>
+        <p>
+          {error ||
+            'Compte détecté côté live, mais le détail invocateur LCU ne répond pas. Relance League (ou quitte/rejoins le lobby) puis rafraîchis.'}
+        </p>
       </section>
     )
   }
@@ -327,19 +422,19 @@ export function HomeBoard({
           <div>
             <span>RANK</span>
             <strong>
-              {s?.tier ? `${s.tier} ${s.division ?? ''}` : '—'}
+              {s?.tier ? `${s.tier} ${s.division ?? ''}` : '-'}
               {s?.lp != null ? ` · ${s.lp} LP` : ''}
             </strong>
           </div>
           <div>
             <span>WR RANKED</span>
-            <strong>{s?.rankedWR != null ? `${s.rankedWR}%` : '—'}</strong>
+            <strong>{s?.rankedWR != null ? `${s.rankedWR}%` : '-'}</strong>
             <em>{s ? `${s.wins}W ${s.losses}L` : ''}</em>
           </div>
           <div>
             <span>FORME RÉCENTE</span>
             <strong>
-              {s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '—'}
+              {s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '-'}
             </strong>
             <em>{s?.recentGames ? `${s.recentGames} games` : ''}</em>
           </div>
@@ -350,20 +445,25 @@ export function HomeBoard({
       {debriefLoading && <p className="home-error">Analyse du match…</p>}
 
       {debrief && (
-        <DebriefPanel debrief={debrief} auto={autoOpen} onClose={() => setDebrief(null)} />
+        <DebriefPanel
+          debrief={debrief}
+          auto={autoOpen}
+          onClose={() => {
+            userPinnedRef.current = false
+            setDebrief(null)
+          }}
+        />
       )}
 
       <div className="home-history-head">
         <h3>HISTORIQUE</h3>
-        <span>
-          {profile.matches.length} parties · debrief auto à chaque game
-        </span>
+        <span>{profile.matches.length} parties · clic pour le debrief</span>
       </div>
 
       <div className="match-list">
         {profile.matches.length === 0 ? (
           <p className="home-empty-inline">
-            Aucune partie récente trouvée via le client. Relance League ou joue une partie — l’historique se remplit dès que LCU le publie.
+            Aucune partie récente trouvée via le client. Relance League ou joue une partie. L'historique se remplit dès que LCU le publie.
           </p>
         ) : (
           profile.matches.map((m) => (

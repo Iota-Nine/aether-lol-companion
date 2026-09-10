@@ -2027,7 +2027,7 @@
   }
 }
 
-/* ── In-game Porofessor-like ── */
+/* ── In-game live board ── */
 .live-slot {
   position: relative;
   overflow: hidden;
@@ -2633,7 +2633,7 @@
   }
 }
 
-/* —— HOME / HISTORIQUE / DEBRIEF —— */
+/* -- HOME / HISTORIQUE / DEBRIEF -- */
 .home-board,
 .home-empty {
   max-width: 1280px;
