@@ -42,7 +42,7 @@ export async function loadChampions(force = false): Promise<typeof cache> {
     number,
     { winRate: number; pickRate: number; banRate: number; tier: string }
   >()
-  let patchOpgg = '—'
+  let patchOpgg = '-'
   try {
     const opgg = await fetchOpggRankedMeta('euw')
     opggById = opgg.byId
@@ -68,7 +68,7 @@ export async function loadChampions(force = false): Promise<typeof cache> {
       winRate: op?.winRate ?? 0,
       pickRate: op?.pickRate ?? 0,
       banRate: op?.banRate ?? 0,
-      tier: op?.tier ?? '—',
+      tier: op?.tier ?? '-',
     }
     byId.set(info.id, info)
     byKey.set(info.key.toLowerCase(), info)
@@ -92,7 +92,7 @@ export async function getAllChampions(): Promise<ChampionInfo[]> {
 
 export async function getOpggPatch(): Promise<string> {
   const data = await loadChampions()
-  return data?.patchOpgg || '—'
+  return data?.patchOpgg || '-'
 }
 
 export function estimateTeamWinChance(winRates: number[]): number {
