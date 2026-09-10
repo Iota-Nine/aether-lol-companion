@@ -304,9 +304,9 @@ export function HomeBoard({
     }
     try {
       const data = await fetchProfile()
-      if (!data.connected) {
+      if (!data.connected || !data.gameName) {
         setProfile(null)
-        setError(null)
+        setError('Invocateur LCU pas encore prêt. Réessai auto…')
         return
       }
       setProfile(data)
@@ -341,9 +341,10 @@ export function HomeBoard({
   useEffect(() => {
     void refresh()
     if (!connected) return
-    const id = window.setInterval(() => void refresh(), 12_000)
+    // Lobby: poll plus souvent tant que le profil n’est pas là
+    const id = window.setInterval(() => void refresh(), profile ? 12_000 : 3000)
     return () => window.clearInterval(id)
-  }, [refresh, connected])
+  }, [refresh, connected, profile])
 
   // Fin de game : retry agressif jusqu’à ce que LCU livre le match
   useEffect(() => {
@@ -395,7 +396,10 @@ export function HomeBoard({
     return (
       <section className="home-empty">
         <h2>COMPTE</h2>
-        <p>{error || 'Impossible de lire ton invocateur LCU.'}</p>
+        <p>
+          {error ||
+            'Compte détecté côté live, mais le détail invocateur LCU ne répond pas. Relance League (ou quitte/rejoins le lobby) puis rafraîchis.'}
+        </p>
       </section>
     )
   }

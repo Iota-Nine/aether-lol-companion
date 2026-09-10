@@ -4,7 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { findLockfile, lcuGet, liveClientGet } from './lcu.js'
 import { loadChampions, getAllChampions, getChampionById } from './champions.js'
-import { buildLiveSession, type LcuChampSelectSession, type LcuSummoner } from './session.js'
+import { buildLiveSession, type LcuChampSelectSession } from './session.js'
 import { createDemoChampSelect } from './demo.js'
 import { normalizeRegion, isTftQueue, queueLabel } from './profiles.js'
 import {
@@ -22,6 +22,7 @@ import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
 import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
 import { buildProfileHome, buildMatchDebrief, buildLatestDebrief } from './history.js'
+import { resolveCurrentSummoner } from './summoner.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
   try {
@@ -266,10 +267,7 @@ export function createApp() {
       )
       const region = normalizeRegion(regionData?.webRegion || regionData?.region || 'euw')
 
-      const currentSummoner = await lcuGet<LcuSummoner>(
-        lockfile,
-        '/lol-summoner/v1/current-summoner',
-      )
+      const currentSummoner = await resolveCurrentSummoner(lockfile)
 
       const lobby = await lcuGet<LobbyPayload>(lockfile, '/lol-lobby/v2/lobby')
       const queueId = lobby?.gameConfig?.queueId ?? gameflow?.gameData?.queue?.id

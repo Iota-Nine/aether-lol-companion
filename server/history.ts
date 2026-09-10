@@ -2,6 +2,7 @@ import { lcuGet } from './lcu.js'
 import { getChampionById, loadChampions } from './champions.js'
 import type { LockfileData } from './types.js'
 import { fetchPlayerStats } from './playerStats.js'
+import { resolveCurrentSummoner } from './summoner.js'
 
 const DDRAGON_FALLBACK = '15.6.1'
 
@@ -266,21 +267,36 @@ function extractGames(hist: unknown): RawGame[] {
   return []
 }
 
-function findYouPart(game: RawGame, puuid: string): NormPart | null {
-  const parts = (game.participants || []).map((p) => {
-    const pid = asNum(p.participantId)
-    const identity = game.participantIdentities?.find((i) => i.participantId === pid)
-    return normalizeParticipant(p, identity)
-  })
+function findYouPart(
+  game: RawGame,
+  puuid: string | null,
+  gameName?: string | null,
+  tagLine?: string | null,
+): NormPart | null {
+  const parts = allNormParts(game)
   if (!parts.length) return null
 
-  const byPuuid = parts.find((p) => p.puuid && p.puuid === puuid)
-  if (byPuuid) return byPuuid
+  if (puuid) {
+    const byPuuid = parts.find((p) => p.puuid && p.puuid === puuid)
+    if (byPuuid) return byPuuid
 
-  const identity = game.participantIdentities?.find((i) => i.player?.puuid === puuid)
-  if (identity?.participantId != null) {
-    const hit = parts.find((p) => p.participantId === identity.participantId)
-    if (hit) return hit
+    const identity = game.participantIdentities?.find((i) => i.player?.puuid === puuid)
+    if (identity?.participantId != null) {
+      const hit = parts.find((p) => p.participantId === identity.participantId)
+      if (hit) return hit
+    }
+  }
+
+  if (gameName) {
+    const name = gameName.toLowerCase()
+    const tag = (tagLine || '').toLowerCase()
+    const byName =
+      parts.find(
+        (p) =>
+          p.gameName.toLowerCase() === name &&
+          (!tag || p.tagLine.toLowerCase() === tag || p.tagLine === '???'),
+      ) || parts.find((p) => p.gameName.toLowerCase() === name)
+    if (byName) return byName
   }
 
   // Historique parfois tronqué : un seul participant = toi
@@ -307,16 +323,23 @@ async function ddragonVersion(): Promise<string> {
 
 async function fetchRawMatchList(
   lockfile: LockfileData,
-  puuid: string,
+  puuid: string | null,
   limit: number,
 ): Promise<RawGame[]> {
   const end = Math.max(limit - 1, 0)
   const endpoints = [
-    `/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=${end}`,
-    `/lol-match-history/v1/products/lol/${puuid}/matches`,
+    // Sans puuid (souvent plus fiable en lobby)
+    `/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=${end}`,
+    `/lol-match-history/v1/products/lol/current-summoner/matches`,
   ]
+  if (puuid) {
+    endpoints.push(
+      `/lol-match-history/v1/products/lol/${puuid}/matches?begIndex=0&endIndex=${end}`,
+      `/lol-match-history/v1/products/lol/${puuid}/matches`,
+    )
+  }
   for (const ep of endpoints) {
-    const hist = await lcuGet<unknown>(lockfile, ep)
+    const hist = await lcuGet<unknown>(lockfile, ep, 6000)
     const games = extractGames(hist)
     if (games.length) return games
   }
@@ -324,29 +347,22 @@ async function fetchRawMatchList(
 }
 
 export async function buildProfileHome(lockfile: LockfileData): Promise<ProfileHome | null> {
-  const me = await lcuGet<{
-    gameName?: string
-    tagLine?: string
-    displayName?: string
-    puuid?: string
-    profileIconId?: number
-    summonerLevel?: number
-  }>(lockfile, '/lol-summoner/v1/current-summoner')
+  const me = await resolveCurrentSummoner(lockfile)
+  if (!me?.gameName) return null
 
-  if (!me?.puuid) return null
-
-  const gameName = me.gameName || me.displayName || 'Invocateur'
-  const tagLine = me.tagLine || 'EUW'
   const version = await ddragonVersion()
   const iconId = me.profileIconId || 29
-  const stats = await fetchPlayerStats(lockfile, me.puuid, 'lol')
-  const matches = await fetchMatchSummaries(lockfile, me.puuid, 20)
+  const stats = me.puuid ? await fetchPlayerStats(lockfile, me.puuid, 'lol') : null
+  const matches = await fetchMatchSummaries(lockfile, me.puuid, 20, {
+    gameName: me.gameName,
+    tagLine: me.tagLine,
+  })
 
   return {
     connected: true,
-    gameName,
-    tagLine,
-    puuid: me.puuid,
+    gameName: me.gameName,
+    tagLine: me.tagLine || 'EUW',
+    puuid: me.puuid || '',
     profileIconId: iconId,
     profileIconUrl: `https://ddragon.leagueoflegends.com/cdn/${version}/img/profileicon/${iconId}.png`,
     summonerLevel: me.summonerLevel || 0,
@@ -396,8 +412,9 @@ function soloGrade(p: {
 
 export async function fetchMatchSummaries(
   lockfile: LockfileData,
-  puuid: string,
+  puuid: string | null,
   limit = 20,
+  identity?: { gameName?: string; tagLine?: string } | null,
 ): Promise<MatchSummary[]> {
   const games = await fetchRawMatchList(lockfile, puuid, limit)
   const out: MatchSummary[] = []
@@ -405,7 +422,7 @@ export async function fetchMatchSummaries(
   for (const g of games.slice(0, limit)) {
     const gameId = asNum(g.gameId)
     if (gameId == null) continue
-    const you = findYouPart(g, puuid)
+    const you = findYouPart(g, puuid, identity?.gameName, identity?.tagLine)
     if (!you) continue
 
     const champ = you.championId ? await getChampionById(you.championId) : null
@@ -510,11 +527,13 @@ export async function buildMatchDebrief(
   gameId: number,
   youPuuid?: string | null,
 ): Promise<MatchDebrief | null> {
-  const mePuuid =
-    youPuuid ||
-    (await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner'))?.puuid ||
-    null
-  if (!mePuuid) return null
+  const me = youPuuid
+    ? { puuid: youPuuid, gameName: null as string | null, tagLine: null as string | null }
+    : await resolveCurrentSummoner(lockfile)
+  const mePuuid = me?.puuid || null
+  const meName = me && 'gameName' in me ? me.gameName : null
+  const meTag = me && 'tagLine' in me ? me.tagLine : null
+  if (!mePuuid && !meName) return null
 
   // Detail game : timeout plus long + plusieurs chemins LCU
   let game: RawGame | null = null
@@ -541,15 +560,7 @@ export async function buildMatchDebrief(
   const parts = allNormParts(game)
   if (!parts.length) return null
 
-  let you =
-    parts.find((p) => p.puuid && p.puuid === mePuuid) ||
-    null
-  if (!you) {
-    const identity = game.participantIdentities?.find((i) => i.player?.puuid === mePuuid)
-    if (identity?.participantId != null) {
-      you = parts.find((p) => p.participantId === identity.participantId) || null
-    }
-  }
+  let you = findYouPart(game, mePuuid, meName, meTag)
   if (!you && parts.length === 1) you = parts[0]!
   if (!you) you = parts[0]!
 
@@ -665,18 +676,21 @@ function extractEogGameId(eog: unknown): number | null {
 
 /** Essaie le bloc fin de game LCU, sinon dernière partie de l’historique */
 export async function buildLatestDebrief(lockfile: LockfileData): Promise<MatchDebrief | null> {
-  const me = await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner')
-  if (!me?.puuid) return null
+  const me = await resolveCurrentSummoner(lockfile)
+  if (!me?.gameName) return null
 
-  const eog = await lcuGet<unknown>(lockfile, '/lol-end-of-game/v1/eog-stats-block')
+  const eog = await lcuGet<unknown>(lockfile, '/lol-end-of-game/v1/eog-stats-block', 5000)
   const eogId = extractEogGameId(eog)
 
   if (eogId != null) {
-    const d = await buildMatchDebrief(lockfile, eogId, me.puuid)
+    const d = await buildMatchDebrief(lockfile, eogId, me.puuid || undefined)
     if (d) return d
   }
 
-  const list = await fetchMatchSummaries(lockfile, me.puuid, 3)
+  const list = await fetchMatchSummaries(lockfile, me.puuid, 3, {
+    gameName: me.gameName,
+    tagLine: me.tagLine,
+  })
   if (!list[0]) return null
-  return buildMatchDebrief(lockfile, list[0].gameId, me.puuid)
+  return buildMatchDebrief(lockfile, list[0].gameId, me.puuid || undefined)
 }
