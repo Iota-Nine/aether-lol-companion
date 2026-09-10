@@ -171,8 +171,8 @@ function createOverlayWindow() {
   overlayUserMoved = false
 
   overlayWindow = new BrowserWindow({
-    width: 520,
-    height: 500,
+    width: 540,
+    height: 620,
     minWidth: 360,
     minHeight: 180,
     show: false,

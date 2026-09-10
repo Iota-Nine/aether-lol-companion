@@ -455,6 +455,29 @@ function InGameBoard({ live }: { live: LiveSession }) {
         </div>
       </div>
 
+      {live.coach && live.coach.tips.length > 0 && (
+        <div className={`ingame-coach urg-${live.coach.urgency}`}>
+          <div className="ingame-coach-head">
+            <span>COACH AETHER</span>
+            <em>{live.coach.urgency.toUpperCase()}</em>
+          </div>
+          <p>
+            <strong>{live.coach.tips[0].title}</strong>
+            {live.coach.tips[0].body}
+          </p>
+          {live.coach.counters[0] && (
+            <small>
+              VS {live.coach.counters[0].enemyChampionName}
+              {live.coach.counters[0].suggestions.length
+                ? ` · counters ${live.coach.counters[0].suggestions.map((s) => s.championName).join(', ')}`
+                : live.coach.counters[0].playTips[0]
+                  ? ` · ${live.coach.counters[0].playTips[0]}`
+                  : ''}
+            </small>
+          )}
+        </div>
+      )}
+
       {roster.length > 0 && (
         <div className="ingame-roster">
           <div className="roster-side ally">

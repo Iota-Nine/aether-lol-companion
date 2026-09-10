@@ -22,6 +22,7 @@ import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
 import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
 import { buildProfileHome, buildMatchDebrief, buildLatestDebrief } from './history.js'
+import { buildCoachAdvice } from './coach.js'
 import { resolveCurrentSummoner } from './summoner.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
@@ -94,6 +95,10 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
         lolBuilds: lol.lolBuilds.slice(0, 7),
         tftComps: tft.tftComps,
       }
+    }
+
+    if (live.mode === 'lol') {
+      live.coach = await buildCoachAdvice(live)
     }
   } catch (e) {
     console.warn('[aether] guides/stats:', e)

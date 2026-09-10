@@ -54,6 +54,9 @@ export default function OverlayApp() {
   const e = ig?.teamTotals.enemy
   const goldDiff = a && e ? a.gold - e.gold : 0
   const events = (ig?.events || []).filter((ev) => (ev.kind || 'other') !== 'system').slice(0, 10)
+  const coach = live?.coach
+  const coachTips = (coach?.tips || []).slice(0, 3)
+  const counter = coach?.counters?.[0]
 
   return (
     <div className={`overlay-shell ${active ? 'hot' : ''} ${clickThrough ? 'thru' : ''}`}>
@@ -85,6 +88,49 @@ export default function OverlayApp() {
           </button>
         </div>
       </header>
+
+      {coach && coach.tips.length > 0 && (
+        <div className={`overlay-coach urg-${coach.urgency}`}>
+          <div className="ov-coach-kicker">
+            <span>COACH</span>
+            <em>{coach.mode === 'ingame' ? 'LIVE' : coach.mode === 'draft' ? 'DRAFT' : 'IDLE'}</em>
+          </div>
+          <p className="ov-coach-headline" key={coach.tips[0]?.id}>
+            <strong>{coach.tips[0]?.title}</strong>
+            <span>{coach.tips[0]?.body}</span>
+          </p>
+          {coachTips.length > 1 && (
+            <ul className="ov-coach-list">
+              {coachTips.slice(1).map((tip) => (
+                <li key={tip.id}>
+                  <b>{tip.title}</b> {tip.body}
+                </li>
+              ))}
+            </ul>
+          )}
+          {counter && (counter.suggestions.length > 0 || counter.playTips.length > 0) && (
+            <div className="ov-coach-counter">
+              {counter.enemyChampionImage ? (
+                <img src={counter.enemyChampionImage} alt="" />
+              ) : (
+                <span className="ov-coach-ph">?</span>
+              )}
+              <div>
+                <strong>
+                  VS {counter.enemyChampionName} · {counter.lane}
+                </strong>
+                {counter.suggestions.length > 0 ? (
+                  <span>
+                    Counters: {counter.suggestions.map((s) => s.championName).join(' · ')}
+                  </span>
+                ) : (
+                  <span>{counter.playTips[0]}</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {!active && (
         <div className="overlay-idle">
@@ -146,12 +192,18 @@ export default function OverlayApp() {
 
           {events.length > 0 && (
             <div className="overlay-feed">
-              {events.map((ev, i) => (
-                <div key={`${ev.id}-${ev.time}-${i}`} className={`ov-ev kind-${ev.kind || 'other'}`}>
-                  <time>{clock(ev.time)}</time>
-                  <span>{ev.label}</span>
-                </div>
-              ))}
+              {events.map((ev, i) => {
+                const tip = coach?.tips.find((t) => t.trigger === ev.label)
+                return (
+                  <div key={`${ev.id}-${ev.time}-${i}`} className={`ov-ev kind-${ev.kind || 'other'}`}>
+                    <time>{clock(ev.time)}</time>
+                    <span>
+                      {ev.label}
+                      {tip ? ` · ${tip.title}` : ''}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
