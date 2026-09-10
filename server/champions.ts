@@ -48,7 +48,7 @@ export async function loadChampions(force = false): Promise<typeof cache> {
     opggById = opgg.byId
     patchOpgg = opgg.patch
   } catch (e) {
-    console.warn('[aether] meta OP.GG indisponible:', e)
+    console.warn('[aether] meta indisponible:', e)
   }
 
   const byId = new Map<number, ChampionInfo>()

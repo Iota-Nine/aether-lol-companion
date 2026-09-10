@@ -11,7 +11,7 @@ export async function fetchLaneMeta(
   limit = 7,
 ): Promise<MetaGuides> {
   const res = await fetch(`/api/meta/lane/${lane}?limit=${limit}`)
-  if (!res.ok) throw new Error('Impossible de charger la meta OP.GG')
+  if (!res.ok) throw new Error('Impossible de charger la meta')
   return res.json()
 }
 

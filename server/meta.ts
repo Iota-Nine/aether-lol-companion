@@ -71,7 +71,7 @@ export async function buildLolGuides(
       coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
       boots: opgg?.boots || '-',
       keystone: opgg?.keystone || '-',
-      tips: opgg?.tip || 'Données OP.GG indisponibles pour ce champion',
+      tips: opgg?.tip || 'Données meta indisponibles pour ce champion',
       links: {
         opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build`,
         uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
@@ -82,7 +82,7 @@ export async function buildLolGuides(
   return guides.sort((a, b) => b.winRate - a.winRate)
 }
 
-/** Top 7 meta OP.GG d'une lane + builds. */
+/** Top 7 meta d'une lane + builds. */
 export async function buildLaneMetaGuides(
   lane: OpggLane,
   limit = 7,
@@ -112,7 +112,7 @@ export async function buildLaneMetaGuides(
       coreItems: opgg?.coreItems?.length ? opgg.coreItems : ['-'],
       boots: opgg?.boots || '-',
       keystone: opgg?.keystone || '-',
-      tips: opgg?.tip || `Meta OP.GG ${lane.toUpperCase()} · rank #${row.tierRank}`,
+      tips: opgg?.tip || `Meta ${lane.toUpperCase()} · rank #${row.tierRank}`,
       links: {
         opgg: `https://www.op.gg/champions/${champ.key.toLowerCase()}/build?position=${lane}`,
         uigg: `https://u.gg/lol/champions/${champ.key.toLowerCase()}/build`,
@@ -122,7 +122,7 @@ export async function buildLaneMetaGuides(
 
   return {
     mode: 'lol',
-    patchNote: `Top ${limit} ${lane.toUpperCase()} · OP.GG patch ${patch} · ranked`,
+    patchNote: `Top ${limit} ${lane.toUpperCase()} · patch ${patch} · ranked`,
     lolBuilds: guides,
     tftComps: [],
   }
@@ -275,7 +275,7 @@ export async function buildMetaGuides(params: {
   const patch = await getOpggPatch()
   return {
     mode: 'lol',
-    patchNote: `Meta OP.GG patch ${patch} · ranked Platinum+ (EUW)`,
+    patchNote: `Meta patch ${patch} · ranked Platinum+ (EUW)`,
     lolBuilds,
     tftComps: [],
   }

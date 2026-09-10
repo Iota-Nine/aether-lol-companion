@@ -2027,7 +2027,7 @@
   }
 }
 
-/* ── In-game Porofessor-like ── */
+/* ── In-game live board ── */
 .live-slot {
   position: relative;
   overflow: hidden;

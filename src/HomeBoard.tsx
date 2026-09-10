@@ -379,7 +379,7 @@ export function HomeBoard({
     return (
       <section className="home-empty">
         <h2>SCOUT META</h2>
-        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon tu peux quand même checker la meta OP.GG en bas.</p>
+        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon tu peux quand même checker la meta en bas.</p>
       </section>
     )
   }

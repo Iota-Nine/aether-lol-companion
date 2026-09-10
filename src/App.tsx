@@ -114,7 +114,7 @@ function PlayerSlot({
     !inGame && !live && accountWr != null
       ? 'COMPTE'
       : champMetaWr != null
-        ? 'OP.GG'
+        ? 'META'
         : accountWr != null
           ? 'COMPTE'
           : 'WR'
@@ -253,7 +253,7 @@ function PlayerSlot({
         )}
         {player.championName && champMetaWr != null && (
           <p className="champ-meta-hint">
-            Meta {player.championName} · {champMetaWr.toFixed(1)}% WR OP.GG (pas ton historique perso)
+            Meta {player.championName} · {champMetaWr.toFixed(1)}% WR (pas ton historique perso)
           </p>
         )}
       </div>
@@ -510,7 +510,7 @@ function LanePicker({
   return (
     <nav
       className={`lane-dock ${sticky ? 'is-sticky' : ''}`}
-      aria-label="Sélecteur de lane meta OP.GG"
+      aria-label="Sélecteur de lane meta"
     >
       <div className="lane-dock-copy">
         <span className="lane-dock-key">LANE META</span>
@@ -575,12 +575,12 @@ function LolBuildsPanel({
   return (
     <section
       className={`guides-panel lol-guides ${scout && !secondary ? 'scout-main' : ''} ${secondary ? 'meta-secondary' : ''}`}
-      id="meta-opgg"
+      id="meta-lane"
     >
       <header className="guides-head">
         <div>
           <p className="panel-kicker">
-            {secondary ? 'META OP.GG' : scout ? 'META SANS LEAGUE' : 'META OP.GG'}
+            {secondary ? 'META RANKED' : scout ? 'META SANS LEAGUE' : 'META RANKED'}
           </p>
           <h2>TOP 7 {lane.toUpperCase()}</h2>
         </div>
@@ -604,7 +604,7 @@ function LolBuildsPanel({
 
       {meta?.patchNote && <p className="lane-meta-note">{meta.patchNote}</p>}
       {error && <p className="lane-meta-error">{error}</p>}
-      {loading && !builds.length && <p className="lane-meta-note">Chargement meta OP.GG…</p>}
+      {loading && !builds.length && <p className="lane-meta-note">Chargement meta…</p>}
 
       <div className={`guides-list ${loading ? 'is-loading' : ''}`}>
         {builds.map((b, i) => (
@@ -621,7 +621,7 @@ function LolBuildsPanel({
             </div>
             <div className={`guide-wr tone-${wrTone(b.winRate)}`}>
               <strong>{b.winRate.toFixed(1)}%</strong>
-              <span>OP.GG {b.pickRate}% PR</span>
+              <span>{b.pickRate}% PR</span>
             </div>
             <div className="guide-build">
               <span className="keystone">{b.keystone}</span>
@@ -790,7 +790,7 @@ export default function App() {
     (phase === 'ChampSelect' ||
       Boolean(live?.timer) ||
       (live?.allies?.some((p) => p.championId || p.isPickIntent) ?? false))
-  // Mode scout : meta OP.GG sans League / hors draft / hors partie
+  // Mode scout : meta sans League / hors draft / hors partie
   const isScoutMode = showLolLanes && !isInGame && !inChampSelect
   const showDraftHud = showLolLanes && (isInGame || inChampSelect)
   const isSoloLive = isInGame && (live?.enemies?.length ?? 0) === 0
@@ -885,7 +885,7 @@ export default function App() {
                   : isScoutMode
                     ? live?.connected
                       ? 'Profil, historique, debrief'
-                      : 'Meta OP.GG sans League'
+                      : 'Meta sans League'
                     : 'LoL Companion Desktop'}
             </span>
           </div>
@@ -1046,7 +1046,7 @@ export default function App() {
               : showHome
                 ? 'PROFIL, HISTORIQUE, DEBRIEF'
                 : isScoutMode
-                  ? 'TOP 7 OP.GG PAR LANE'
+                  ? 'TOP 7 META PAR LANE'
                   : 'LCU: ranked + historique'}
           </span>
           <span>lecture seule</span>
@@ -1186,7 +1186,7 @@ export default function App() {
         </>
       )}
 
-      {/* Meta OP.GG hors in-game (secondaire si profil) */}
+      {/* Meta hors in-game (secondaire si profil) */}
       {showLolLanes && !isInGame && (
         <LolBuildsPanel
           lane={metaLane}

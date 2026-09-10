@@ -533,7 +533,7 @@ async function fetchInGameStateFromPlayers(
   }
 }
 
-/** Fusionne live in-game dans une LiveSession Porofessor-like */
+/** Fusionne live in-game dans une LiveSession */
 export async function buildLolInGameSession(params: {
   connected: boolean
   phase: string
@@ -737,7 +737,7 @@ export async function buildLolFromGameflow(params: {
       championImage: champ?.image ?? null,
       isPickIntent: false,
       locked: true,
-      championWinRate: champ?.winRate ?? null,
+      championWinRate: champ?.winRate && champ.winRate > 0 ? champ.winRate : null,
       championTier: champ?.tier ?? null,
       spell1Id: null,
       spell2Id: null,

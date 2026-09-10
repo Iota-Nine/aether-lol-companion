@@ -1,4 +1,4 @@
-/** Client OP.GG - meta champions + builds (API publique + MCP officiel OP.GG). */
+/** Client meta champions + builds (sources ranked publiques). */
 
 export type OpggLane = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 
@@ -30,7 +30,7 @@ export interface OpggBuild {
   skillOrder: string[]
   tip: string
   patch: string
-  source: 'op.gg'
+  source: 'meta'
 }
 
 const CACHE_MS = 1000 * 60 * 45
@@ -213,7 +213,7 @@ export async function fetchOpggRankedMeta(region = 'euw'): Promise<{
   return { patch, byId, byLane }
 }
 
-/** Top N meta OP.GG pour une lane (tri tier rank). */
+/** Top N meta pour une lane (tri tier rank). */
 export async function fetchOpggLaneTop(
   lane: OpggLane,
   limit = 7,
@@ -252,7 +252,7 @@ async function mcpRpc(body: Record<string, unknown>): Promise<unknown> {
   if (!last) {
     // notifications can return empty / non-json
     if (String(body.method || '').startsWith('notifications/')) return null
-    throw new Error('Réponse MCP OP.GG invalide')
+    throw new Error('Réponse meta invalide')
   }
   return JSON.parse(last)
 }
@@ -384,7 +384,7 @@ export async function fetchOpggBuild(params: {
 
     if (response.error) throw new Error(response.error.message || 'MCP error')
     const text = response.result?.content?.[0]?.text || ''
-    if (!text) throw new Error('Build OP.GG vide')
+    if (!text) throw new Error('Build meta vide')
 
     const parsed = parseOpggAnalysisText(text)
     const build: OpggBuild = {
@@ -401,14 +401,14 @@ export async function fetchOpggBuild(params: {
       runePage: parsed.runePage,
       spells: parsed.spells.slice(0, 2),
       skillOrder: parsed.skillOrder.slice(0, 6),
-      tip: `Source OP.GG patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
+      tip: `Source meta patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
       patch: meta.patch,
-      source: 'op.gg',
+      source: 'meta',
     }
     buildCache.set(cacheKey, { at: Date.now(), build })
     return build
   } catch (e) {
-    console.warn('[aether] OP.GG build:', champ, e)
+    console.warn('[aether] meta build:', champ, e)
     if (!ranked) return null
     const build: OpggBuild = {
       championId: params.championId,
@@ -424,9 +424,9 @@ export async function fetchOpggBuild(params: {
       runePage: '-',
       spells: [],
       skillOrder: [],
-      tip: `WR/PR OP.GG patch ${meta.patch} (build détaillé indisponible)`,
+      tip: `WR/PR patch ${meta.patch} (build détaillé indisponible)`,
       patch: meta.patch,
-      source: 'op.gg',
+      source: 'meta',
     }
     buildCache.set(cacheKey, { at: Date.now(), build })
     return build

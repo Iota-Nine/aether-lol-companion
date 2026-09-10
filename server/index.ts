@@ -90,7 +90,7 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
       const lol = await buildMetaGuides({ mode: 'lol', championIds: [] })
       live.guides = {
         mode: 'lol',
-        patchNote: 'Suggestions meta OP.GG (en attente de lobby LoL)',
+        patchNote: 'Suggestions meta (en attente de lobby LoL)',
         lolBuilds: lol.lolBuilds.slice(0, 7),
         tftComps: tft.tftComps,
       }
@@ -247,7 +247,7 @@ export function createApp() {
               region: 'euw',
               mode: 'idle',
               message:
-                'Mode meta solo, League non requis. Choisis une lane pour le top 7 OP.GG.',
+                'Mode meta solo, League non requis. Choisis une lane pour le top 7.',
             }),
           ),
         )
@@ -279,7 +279,7 @@ export function createApp() {
         ? await liveClientGet<LiveClientPlayer[]>('/liveclientdata/playerlist')
         : null
 
-      // ── LoL EN PARTIE (Live Client 2999) - priorité Porofessor-like ──
+      // ── LoL EN PARTIE (Live Client 2999) ──
       if (inGame && !tft) {
         const flowPlayers = [
           ...(gameflow?.gameData?.teamOne ?? []),
@@ -444,8 +444,8 @@ export function createApp() {
             mode: lobby ? 'lol' : 'idle',
             queueName: queueLabel(queueId, gameMode),
             message: you
-              ? `Connecté (${you}). Meta OP.GG dispo, le draft s’affichera en champ select.`
-              : 'Client détecté. Meta OP.GG dispo sans partie, le live s’active au draft.',
+              ? `Connecté (${you}). Meta dispo, le draft s’affichera en champ select.`
+              : 'Client détecté. Meta dispo sans partie, le live s’active au draft.',
           }),
           lockfile,
         ),
