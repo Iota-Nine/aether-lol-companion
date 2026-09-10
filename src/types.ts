@@ -108,6 +108,40 @@ export interface LiveSession {
   message: string
   guides?: MetaGuides
   inGame?: InGameSnapshot | null
+  coach?: CoachAdvice | null
+}
+
+export interface CoachTip {
+  id: string
+  priority: number
+  kind: 'counter' | 'tactic' | 'objective' | 'endgame' | 'macro' | 'draft' | 'matchup'
+  title: string
+  body: string
+  trigger?: string
+}
+
+export interface CoachCounterCard {
+  enemyChampionId: number
+  enemyChampionName: string
+  enemyChampionImage: string | null
+  lane: string
+  suggestions: {
+    championId: number
+    championName: string
+    championImage: string | null
+    reason: string
+    score: number
+  }[]
+  playTips: string[]
+}
+
+export interface CoachAdvice {
+  mode: 'draft' | 'ingame' | 'idle'
+  headline: string
+  urgency: 'low' | 'mid' | 'high' | 'critical'
+  tips: CoachTip[]
+  counters: CoachCounterCard[]
+  updatedAt: number
 }
 
 export interface LolBuildGuide {
@@ -217,6 +251,13 @@ export interface DebriefPlayer {
   cs: number
   gold: number
   damage: number
+  damageTurrets: number
+  damageObjectives: number
+  damageTaken: number
+  mitigated: number
+  heal: number
+  shield: number
+  cc: number
   vision: number
   items: number[]
   win: boolean

@@ -41,7 +41,7 @@ export interface InGamePlayerLive {
   respawnTimer: number
   position: string
   items: InGameItem[]
-  /** Score de combat dérivé (K/D/A + CS + level) — proxy dégâts tant que Riot n'expose pas les DMG */
+  /** Score de combat dérivé (K/D/A + CS + level) - proxy dégâts tant que Riot n'expose pas les DMG */
   combatScore: number
   /** Part des dégâts/combat de l'équipe (0-100) */
   damageShare: number
@@ -225,29 +225,54 @@ function eventKind(name?: string): GameEvent['kind'] {
   }
 }
 
-function eventLabel(ev: {
-  EventName?: string
-  KillerName?: string
-  VictimName?: string
-  DragonType?: string
-}): string {
+function champAliasMap(players: Array<{ gameName: string; riotId?: string; championName: string }>): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const p of players) {
+    const champ = p.championName || '?'
+    if (p.gameName) map.set(p.gameName.toLowerCase(), champ)
+    if (p.riotId) {
+      map.set(p.riotId.toLowerCase(), champ)
+      const bare = p.riotId.split('#')[0]
+      if (bare) map.set(bare.toLowerCase(), champ)
+    }
+  }
+  return map
+}
+
+function toChampName(raw: string | undefined, map: Map<string, string>): string {
+  if (!raw) return '?'
+  const key = raw.toLowerCase()
+  return map.get(key) || map.get(key.split('#')[0] || '') || raw
+}
+
+function eventLabel(
+  ev: {
+    EventName?: string
+    KillerName?: string
+    VictimName?: string
+    DragonType?: string
+  },
+  nameMap: Map<string, string>,
+): string {
+  const killer = toChampName(ev.KillerName, nameMap)
+  const victim = toChampName(ev.VictimName, nameMap)
   switch (ev.EventName) {
     case 'ChampionKill':
-      return `${ev.KillerName ?? '?'} ✕ ${ev.VictimName ?? '?'}`
+      return `${killer} ✕ ${victim}`
     case 'DragonKill':
-      return `DRAGON ${ev.DragonType ?? ''} · ${ev.KillerName ?? '?'}`
+      return `DRAGON ${ev.DragonType ?? ''} · ${killer}`
     case 'BaronKill':
-      return `BARON · ${ev.KillerName ?? '?'}`
+      return `BARON · ${killer}`
     case 'HeraldKill':
-      return `HÉRAUT · ${ev.KillerName ?? '?'}`
+      return `HÉRAUT · ${killer}`
     case 'TurretKilled':
-      return `TOUR · ${ev.KillerName ?? 'équipe'}`
+      return `TOUR · ${killer === '?' ? 'équipe' : killer}`
     case 'InhibKilled':
-      return `INHIB · détruit`
+      return `INHIB · ${killer === '?' ? 'détruit' : killer}`
     case 'Ace':
       return `ACE`
     case 'FirstBlood':
-      return `FIRST BLOOD · ${ev.KillerName ?? ''}`
+      return `FIRST BLOOD · ${killer}`
     case 'GameStart':
       return `START`
     case 'MinionsSpawning':
@@ -360,7 +385,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       championId: champ.id,
       championKey: champ.key,
       championImage: champ.image,
-      championWinRate: champ.winRate,
+      championWinRate: champ.winRate && champ.winRate > 0 ? champ.winRate : null,
       championTier: champ.tier,
       level,
       kills,
@@ -370,7 +395,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       wardScore: Number((p.scores?.wardScore ?? 0).toFixed(1)),
       isDead: Boolean(p.isDead),
       respawnTimer: Math.round(p.respawnTimer || 0),
-      position: p.position || '—',
+      position: p.position || '-',
       items,
       combatScore: 0,
       damageShare: 0,
@@ -409,6 +434,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
     gold: list.reduce((s, p) => s + p.goldEstimate, 0),
   })
 
+  const nameMap = champAliasMap([...allies, ...enemies])
   const events = (data.events?.Events || [])
     .slice(-12)
     .reverse()
@@ -416,7 +442,10 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       id: ev.EventID ?? 0,
       name: ev.EventName || '',
       time: Math.floor(ev.EventTime || 0),
-      label: eventLabel(ev as { EventName?: string; KillerName?: string; VictimName?: string; DragonType?: string; Recipient?: string }),
+      label: eventLabel(
+        ev as { EventName?: string; KillerName?: string; VictimName?: string; DragonType?: string },
+        nameMap,
+      ),
       kind: eventKind(ev.EventName),
     }))
 
@@ -481,7 +510,7 @@ async function fetchInGameStateFromPlayers(
       championId: champ.id,
       championKey: champ.key,
       championImage: champ.image,
-      championWinRate: champ.winRate,
+      championWinRate: champ.winRate && champ.winRate > 0 ? champ.winRate : null,
       championTier: champ.tier,
       level,
       kills,
@@ -491,7 +520,7 @@ async function fetchInGameStateFromPlayers(
       wardScore: Number((p.scores?.wardScore ?? 0).toFixed(1)),
       isDead: Boolean(p.isDead),
       respawnTimer: Math.round(p.respawnTimer || 0),
-      position: p.position || '—',
+      position: p.position || '-',
       items,
       combatScore: 0,
       damageShare: 0,
@@ -533,7 +562,7 @@ async function fetchInGameStateFromPlayers(
   }
 }
 
-/** Fusionne live in-game dans une LiveSession Porofessor-like */
+/** Fusionne live in-game dans une LiveSession */
 export async function buildLolInGameSession(params: {
   connected: boolean
   phase: string
@@ -559,7 +588,7 @@ export async function buildLolInGameSession(params: {
       summonerName: p.riotId,
       gameName: p.gameName,
       tagLine: p.tagLine,
-      assignedPosition: p.position || pre?.assignedPosition || '—',
+      assignedPosition: p.position || pre?.assignedPosition || '-',
       championId: p.championId ?? pre?.championId ?? null,
       championName: p.championName,
       championKey: p.championKey ?? pre?.championKey ?? null,
@@ -650,7 +679,7 @@ export async function buildLolInGameSession(params: {
       enemy: solo ? 0 : Number((100 - allyChance).toFixed(1)),
     },
     message: solo
-      ? `EN PARTIE · ${mm}:${ss} · ${practice ? 'OUTIL D’ENTRAÎNEMENT (solo)' : 'SOLO / CUSTOM'} — pas d’ennemis`
+      ? `EN PARTIE · ${mm}:${ss} · ${practice ? 'OUTIL D’ENTRAÎNEMENT (solo)' : 'SOLO / CUSTOM'}, pas d'ennemis`
       : `EN PARTIE · ${mm}:${ss} · KDA ${ingame.teamTotals.ally.kills}/${ingame.teamTotals.ally.deaths}/${ingame.teamTotals.ally.assists} vs ${ingame.teamTotals.enemy.kills}/${ingame.teamTotals.enemy.deaths}/${ingame.teamTotals.enemy.assists}`,
     inGame: {
       active: true,
@@ -730,14 +759,14 @@ export async function buildLolFromGameflow(params: {
       summonerName: `${gameName}#${tagLine}`,
       gameName,
       tagLine,
-      assignedPosition: '—',
+      assignedPosition: '-',
       championId: raw.championId ?? champ?.id ?? null,
       championName: champ?.name ?? null,
       championKey: champ?.key ?? null,
       championImage: champ?.image ?? null,
       isPickIntent: false,
       locked: true,
-      championWinRate: champ?.winRate ?? null,
+      championWinRate: champ?.winRate && champ.winRate > 0 ? champ.winRate : null,
       championTier: champ?.tier ?? null,
       spell1Id: null,
       spell2Id: null,
@@ -815,7 +844,7 @@ export async function buildLolFromGameflow(params: {
     teamWinChance: { ally: 50, enemy: 50 },
     message: liveState
       ? `EN PARTIE · Live Client OK · ${allies.length + enemies.length} joueurs`
-      : `EN PARTIE · scoreboard LCU (${allies.length + enemies.length} joueurs) — Live Client 2999 indisponible`,
+      : `EN PARTIE · scoreboard LCU (${allies.length + enemies.length} joueurs), Live Client 2999 indisponible`,
     inGame: {
       active: true,
       gameMode: liveState?.gameMode || params.session.gameData?.queue?.gameMode || 'CLASSIC',

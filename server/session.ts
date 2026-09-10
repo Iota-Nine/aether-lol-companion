@@ -71,9 +71,9 @@ function positionLabel(pos?: string): string {
     bot: 'ADC',
     utility: 'Support',
     support: 'Support',
-    '': '—',
+    '': '-',
   }
-  if (!pos) return '—'
+  if (!pos) return '-'
   return map[pos.toLowerCase()] ?? pos
 }
 
@@ -150,7 +150,7 @@ async function toPlayerCard(
     championImage: champ?.image ?? null,
     isPickIntent: isPickIntent && !locked,
     locked,
-    championWinRate: champ?.winRate ?? null,
+    championWinRate: champ?.winRate && champ.winRate > 0 ? champ.winRate : null,
     championTier: champ?.tier ?? null,
     spell1Id: player.spell1Id ?? null,
     spell2Id: player.spell2Id ?? null,
@@ -161,7 +161,6 @@ async function toPlayerCard(
 
 export async function buildLiveSession(params: {
   connected: boolean
-  demo: boolean
   phase: string
   region: string
   message: string
@@ -176,7 +175,7 @@ export async function buildLiveSession(params: {
     return {
       connected: params.connected,
       phase: params.phase,
-      demo: params.demo,
+      demo: false,
       mode: 'lol',
       queueName: 'LoL',
       region,
@@ -240,7 +239,7 @@ export async function buildLiveSession(params: {
   return {
     connected: params.connected,
     phase: params.phase,
-    demo: params.demo,
+    demo: false,
     mode: 'lol',
     queueName: 'LoL Draft',
     region,
