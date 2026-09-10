@@ -20,7 +20,7 @@ function parseLockfile(filePath: string): LockfileData | null {
     const raw = fs.readFileSync(filePath, 'utf8').trim()
     const [name, pid, port, password, protocol] = raw.split(':')
     if (!name || !pid || !port || !password || !protocol) return null
-    // Ignore Riot Client remoting lockfile — on veut LeagueClient
+    // Ignore Riot Client remoting lockfile - on veut LeagueClient
     if (name.toLowerCase().includes('riot')) return null
     return {
       name,
@@ -127,7 +127,7 @@ export function lcuGet<T>(
   })
 }
 
-/** Live Client Data API (en partie uniquement) — port 2999 */
+/** Live Client Data API (en partie uniquement) - port 2999 */
 export function liveClientGet<T>(endpoint: string): Promise<T | null> {
   const tryOnce = (protocol: 'https' | 'http') =>
     new Promise<T | null>((resolve) => {

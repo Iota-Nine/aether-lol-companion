@@ -176,7 +176,7 @@ const LATEST_KEY = 'aether:latestKnownGameId'
 
 function debriefFromSummary(match: MatchSummary): MatchDebrief {
   const grade = match.autoGrade || 'MEH'
-  const verdict = match.autoVerdict || 'Analyse détaillée indisponible — stats perso uniquement.'
+  const verdict = match.autoVerdict || 'Pas le détail complet, juste tes stats.'
   const you: MatchDebrief['players'][number] = {
     gameName: 'TOI',
     tagLine: '',
@@ -205,12 +205,12 @@ function debriefFromSummary(match: MatchSummary): MatchDebrief {
     gameDuration: match.gameDuration,
     queueLabel: match.queueLabel,
     headline: match.win
-      ? `WIN — ${match.championName} · ${grade}`
-      : `LOSS — ${match.championName} · ${grade}`,
+      ? `WIN: ${match.championName} · ${grade}`
+      : `LOSS: ${match.championName} · ${grade}`,
     why: [
       match.win ? 'Victoire enregistrée sur ton compte.' : 'Défaite enregistrée sur ton compte.',
       `Toi (${match.championName}) : ${verdict}`,
-      'Détail équipe complet indisponible via LCU — debrief perso.',
+      'Pas le détail complet de toute l’équipe, juste ton side perso.',
     ],
     players: [you],
     mvp: match.win ? `TOI · ${match.championName}` : null,
@@ -378,7 +378,7 @@ export function HomeBoard({
     return (
       <section className="home-empty">
         <h2>SCOUT META</h2>
-        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon, scrappe la meta OP.GG ci-dessous.</p>
+        <p>Lance League pour voir ton profil, l’historique et les debriefs. Sinon tu peux quand même checker la meta OP.GG en bas.</p>
       </section>
     )
   }
@@ -418,19 +418,19 @@ export function HomeBoard({
           <div>
             <span>RANK</span>
             <strong>
-              {s?.tier ? `${s.tier} ${s.division ?? ''}` : '—'}
+              {s?.tier ? `${s.tier} ${s.division ?? ''}` : '-'}
               {s?.lp != null ? ` · ${s.lp} LP` : ''}
             </strong>
           </div>
           <div>
             <span>WR RANKED</span>
-            <strong>{s?.rankedWR != null ? `${s.rankedWR}%` : '—'}</strong>
+            <strong>{s?.rankedWR != null ? `${s.rankedWR}%` : '-'}</strong>
             <em>{s ? `${s.wins}W ${s.losses}L` : ''}</em>
           </div>
           <div>
             <span>FORME RÉCENTE</span>
             <strong>
-              {s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '—'}
+              {s?.formScore != null ? `${s.formScore}%` : s?.recentWR != null ? `${s.recentWR}%` : '-'}
             </strong>
             <em>{s?.recentGames ? `${s.recentGames} games` : ''}</em>
           </div>
@@ -453,13 +453,13 @@ export function HomeBoard({
 
       <div className="home-history-head">
         <h3>HISTORIQUE</h3>
-        <span>{profile.matches.length} parties · clic = debrief (ne se fait plus écraser)</span>
+        <span>{profile.matches.length} parties · clic pour le debrief</span>
       </div>
 
       <div className="match-list">
         {profile.matches.length === 0 ? (
           <p className="home-empty-inline">
-            Aucune partie récente trouvée via le client. Relance League ou joue une partie — l’historique se remplit dès que LCU le publie.
+            Aucune partie récente trouvée via le client. Relance League ou joue une partie. L'historique se remplit dès que LCU le publie.
           </p>
         ) : (
           profile.matches.map((m) => (

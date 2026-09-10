@@ -41,7 +41,7 @@ export interface InGamePlayerLive {
   respawnTimer: number
   position: string
   items: InGameItem[]
-  /** Score de combat dérivé (K/D/A + CS + level) — proxy dégâts tant que Riot n'expose pas les DMG */
+  /** Score de combat dérivé (K/D/A + CS + level) - proxy dégâts tant que Riot n'expose pas les DMG */
   combatScore: number
   /** Part des dégâts/combat de l'équipe (0-100) */
   damageShare: number
@@ -370,7 +370,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       wardScore: Number((p.scores?.wardScore ?? 0).toFixed(1)),
       isDead: Boolean(p.isDead),
       respawnTimer: Math.round(p.respawnTimer || 0),
-      position: p.position || '—',
+      position: p.position || '-',
       items,
       combatScore: 0,
       damageShare: 0,
@@ -491,7 +491,7 @@ async function fetchInGameStateFromPlayers(
       wardScore: Number((p.scores?.wardScore ?? 0).toFixed(1)),
       isDead: Boolean(p.isDead),
       respawnTimer: Math.round(p.respawnTimer || 0),
-      position: p.position || '—',
+      position: p.position || '-',
       items,
       combatScore: 0,
       damageShare: 0,
@@ -559,7 +559,7 @@ export async function buildLolInGameSession(params: {
       summonerName: p.riotId,
       gameName: p.gameName,
       tagLine: p.tagLine,
-      assignedPosition: p.position || pre?.assignedPosition || '—',
+      assignedPosition: p.position || pre?.assignedPosition || '-',
       championId: p.championId ?? pre?.championId ?? null,
       championName: p.championName,
       championKey: p.championKey ?? pre?.championKey ?? null,
@@ -650,7 +650,7 @@ export async function buildLolInGameSession(params: {
       enemy: solo ? 0 : Number((100 - allyChance).toFixed(1)),
     },
     message: solo
-      ? `EN PARTIE · ${mm}:${ss} · ${practice ? 'OUTIL D’ENTRAÎNEMENT (solo)' : 'SOLO / CUSTOM'} — pas d’ennemis`
+      ? `EN PARTIE · ${mm}:${ss} · ${practice ? 'OUTIL D’ENTRAÎNEMENT (solo)' : 'SOLO / CUSTOM'}, pas d'ennemis`
       : `EN PARTIE · ${mm}:${ss} · KDA ${ingame.teamTotals.ally.kills}/${ingame.teamTotals.ally.deaths}/${ingame.teamTotals.ally.assists} vs ${ingame.teamTotals.enemy.kills}/${ingame.teamTotals.enemy.deaths}/${ingame.teamTotals.enemy.assists}`,
     inGame: {
       active: true,
@@ -730,7 +730,7 @@ export async function buildLolFromGameflow(params: {
       summonerName: `${gameName}#${tagLine}`,
       gameName,
       tagLine,
-      assignedPosition: '—',
+      assignedPosition: '-',
       championId: raw.championId ?? champ?.id ?? null,
       championName: champ?.name ?? null,
       championKey: champ?.key ?? null,
@@ -815,7 +815,7 @@ export async function buildLolFromGameflow(params: {
     teamWinChance: { ally: 50, enemy: 50 },
     message: liveState
       ? `EN PARTIE · Live Client OK · ${allies.length + enemies.length} joueurs`
-      : `EN PARTIE · scoreboard LCU (${allies.length + enemies.length} joueurs) — Live Client 2999 indisponible`,
+      : `EN PARTIE · scoreboard LCU (${allies.length + enemies.length} joueurs), Live Client 2999 indisponible`,
     inGame: {
       active: true,
       gameMode: liveState?.gameMode || params.session.gameData?.queue?.gameMode || 'CLASSIC',
