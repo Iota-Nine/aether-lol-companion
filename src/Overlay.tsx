@@ -127,7 +127,7 @@ export default function OverlayApp() {
                 <div key={`oa-${p.cellId}`} className={`ov-chip ${p.live?.isDead ? 'dead' : ''}`} title={p.championName || ''}>
                   {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                   <em>
-                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '—'}
+                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '-'}
                   </em>
                 </div>
               ))}
@@ -137,7 +137,7 @@ export default function OverlayApp() {
                 <div key={`oe-${p.cellId}`} className={`ov-chip ${p.live?.isDead ? 'dead' : ''}`} title={p.championName || ''}>
                   {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                   <em>
-                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '—'}
+                    {p.live ? `${p.live.kills}/${p.live.deaths}` : '-'}
                   </em>
                 </div>
               ))}
