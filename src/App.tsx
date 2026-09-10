@@ -102,13 +102,22 @@ function PlayerSlot({
 }) {
   const live = player.live
   const stats = player.playerStats
-  // Anneau = meta OP.GG du CHAMPION affiché (pas ton WR ranked compte)
-  const champMetaWr = player.championWinRate
+  // Anneau: WR COMPTE ranked (scout). Meta champ en hint, pas en faux 100%.
+  const champMetaWr =
+    player.championWinRate != null && player.championWinRate > 0 ? player.championWinRate : null
   const accountWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
-    : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  const displayWr = champMetaWr ?? (live || inGame ? null : accountWr)
-  const wrLabel = champMetaWr != null ? 'OP.GG' : accountWr != null ? 'COMPTE' : 'WR'
+    : stats?.rankedWR ?? stats?.formScore ?? stats?.recentWR
+  // En draft: privilégie le WR compte. En live: meta champ si dispo, sinon rien.
+  const displayWr = inGame || live ? champMetaWr : accountWr ?? champMetaWr
+  const wrLabel =
+    !inGame && !live && accountWr != null
+      ? 'COMPTE'
+      : champMetaWr != null
+        ? 'OP.GG'
+        : accountWr != null
+          ? 'COMPTE'
+          : 'WR'
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
 

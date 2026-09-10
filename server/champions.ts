@@ -65,7 +65,7 @@ export async function loadChampions(force = false): Promise<typeof cache> {
       title: champ.title,
       image: `https://ddragon.leagueoflegends.com/cdn/${version}/img/champion/${champ.image.full}`,
       tags: champ.tags,
-      winRate: op?.winRate ?? 0,
+      winRate: op?.winRate && op.winRate > 0 ? op.winRate : 0,
       pickRate: op?.pickRate ?? 0,
       banRate: op?.banRate ?? 0,
       tier: op?.tier ?? '-',
