@@ -174,8 +174,14 @@ function PlayerSlot({
         <div className="slot-line-top">
           <div className="slot-identity">
             <strong className="slot-name">
-              {player.gameName}
-              <span className="slot-tag">#{player.tagLine}</span>
+              {player.championName
+                ? player.championName
+                : (
+                  <>
+                    {player.gameName}
+                    <span className="slot-tag">#{player.tagLine}</span>
+                  </>
+                )}
             </strong>
             {isYou && <span className="you-chip">YOU</span>}
           </div>
@@ -184,14 +190,15 @@ function PlayerSlot({
 
         <div className="slot-line-mid">
           {player.championName ? (
-            <>
-              <span className="champ-label">{player.championName}</span>
-              {player.championTier && !live && (
-                <span className={`tier tier-${player.championTier.toLowerCase()}`}>
-                  TIER {player.championTier}
-                </span>
-              )}
-            </>
+            player.championTier && !live ? (
+              <span className={`tier tier-${player.championTier.toLowerCase()}`}>
+                TIER {player.championTier}
+              </span>
+            ) : live ? (
+              <span className="champ-label dim">LIVE</span>
+            ) : (
+              <span className="champ-label dim">LOCK</span>
+            )
           ) : (
             <span className="champ-label dim">
               {tft ? 'En lobby / file d’attente…' : 'En attente du pick…'}

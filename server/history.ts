@@ -863,14 +863,14 @@ export async function buildMatchDebrief(
   const why: string[] = []
   if (youWon) {
     why.push('Victoire: votre équipe a mieux converti fights / objectifs.')
-    if (mvp) why.push(`MVP allié : ${mvp.gameName} (${mvp.championName}): ${mvp.verdict}`)
+    if (mvp) why.push(`MVP allié : ${mvp.championName} : ${mvp.verdict}`)
   } else {
     why.push('Défaite: trop peu d’avantage économique ou trop de morts inutiles.')
     if (intFeed && (intFeed.grade === 'FEED' || intFeed.grade === 'INT' || intFeed.score < 40)) {
-      why.push(`Point faible : ${intFeed.gameName} (${intFeed.championName}): ${intFeed.verdict}`)
+      why.push(`Point faible : ${intFeed.championName} : ${intFeed.verdict}`)
     }
     if (enemyCarry && enemyCarry.score >= 65) {
-      why.push(`Ils ont été portés par ${enemyCarry.gameName} (${enemyCarry.championName}).`)
+      why.push(`Ils ont été portés par ${enemyCarry.championName}.`)
     }
   }
 
@@ -902,8 +902,8 @@ export async function buildMatchDebrief(
     headline,
     why,
     players,
-    mvp: mvp ? `${mvp.gameName} · ${mvp.championName}` : null,
-    intFeed: intFeed && intFeed.score < 45 ? `${intFeed.gameName} · ${intFeed.championName}` : null,
+    mvp: mvp ? mvp.championName : null,
+    intFeed: intFeed && intFeed.score < 45 ? intFeed.championName : null,
   }
 }
 

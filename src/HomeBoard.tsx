@@ -114,10 +114,8 @@ function DebriefPanel({
                 </div>
                 <div className="debrief-meta">
                   <strong>
-                    {p.isYou ? 'TOI' : p.gameName}
-                    <span>#{p.tagLine}</span>
+                    {p.isYou ? `TOI · ${p.championName}` : p.championName}
                   </strong>
-                  <span className="debrief-champ-name">{p.championName}</span>
                   <span className="debrief-kda">
                     {p.kills}/{p.deaths}/{p.assists} · CS {p.cs} · {Math.round(p.gold / 1000)}k or
                   </span>
@@ -232,8 +230,8 @@ function debriefFromSummary(match: MatchSummary): MatchDebrief {
       'Pas le détail complet de toute l’équipe, juste ton side perso.',
     ],
     players: [you],
-    mvp: match.win ? `TOI · ${match.championName}` : null,
-    intFeed: !match.win && (grade === 'FEED' || grade === 'INT') ? `TOI · ${match.championName}` : null,
+    mvp: match.win ? match.championName : null,
+    intFeed: !match.win && (grade === 'FEED' || grade === 'INT') ? match.championName : null,
   }
 }
 

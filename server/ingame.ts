@@ -225,29 +225,54 @@ function eventKind(name?: string): GameEvent['kind'] {
   }
 }
 
-function eventLabel(ev: {
-  EventName?: string
-  KillerName?: string
-  VictimName?: string
-  DragonType?: string
-}): string {
+function champAliasMap(players: Array<{ gameName: string; riotId?: string; championName: string }>): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const p of players) {
+    const champ = p.championName || '?'
+    if (p.gameName) map.set(p.gameName.toLowerCase(), champ)
+    if (p.riotId) {
+      map.set(p.riotId.toLowerCase(), champ)
+      const bare = p.riotId.split('#')[0]
+      if (bare) map.set(bare.toLowerCase(), champ)
+    }
+  }
+  return map
+}
+
+function toChampName(raw: string | undefined, map: Map<string, string>): string {
+  if (!raw) return '?'
+  const key = raw.toLowerCase()
+  return map.get(key) || map.get(key.split('#')[0] || '') || raw
+}
+
+function eventLabel(
+  ev: {
+    EventName?: string
+    KillerName?: string
+    VictimName?: string
+    DragonType?: string
+  },
+  nameMap: Map<string, string>,
+): string {
+  const killer = toChampName(ev.KillerName, nameMap)
+  const victim = toChampName(ev.VictimName, nameMap)
   switch (ev.EventName) {
     case 'ChampionKill':
-      return `${ev.KillerName ?? '?'} ✕ ${ev.VictimName ?? '?'}`
+      return `${killer} ✕ ${victim}`
     case 'DragonKill':
-      return `DRAGON ${ev.DragonType ?? ''} · ${ev.KillerName ?? '?'}`
+      return `DRAGON ${ev.DragonType ?? ''} · ${killer}`
     case 'BaronKill':
-      return `BARON · ${ev.KillerName ?? '?'}`
+      return `BARON · ${killer}`
     case 'HeraldKill':
-      return `HÉRAUT · ${ev.KillerName ?? '?'}`
+      return `HÉRAUT · ${killer}`
     case 'TurretKilled':
-      return `TOUR · ${ev.KillerName ?? 'équipe'}`
+      return `TOUR · ${killer === '?' ? 'équipe' : killer}`
     case 'InhibKilled':
-      return `INHIB · détruit`
+      return `INHIB · ${killer === '?' ? 'détruit' : killer}`
     case 'Ace':
       return `ACE`
     case 'FirstBlood':
-      return `FIRST BLOOD · ${ev.KillerName ?? ''}`
+      return `FIRST BLOOD · ${killer}`
     case 'GameStart':
       return `START`
     case 'MinionsSpawning':
@@ -409,6 +434,7 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
     gold: list.reduce((s, p) => s + p.goldEstimate, 0),
   })
 
+  const nameMap = champAliasMap([...allies, ...enemies])
   const events = (data.events?.Events || [])
     .slice(-12)
     .reverse()
@@ -416,7 +442,10 @@ export async function fetchInGameState(localRiotId?: string | null): Promise<InG
       id: ev.EventID ?? 0,
       name: ev.EventName || '',
       time: Math.floor(ev.EventTime || 0),
-      label: eventLabel(ev as { EventName?: string; KillerName?: string; VictimName?: string; DragonType?: string; Recipient?: string }),
+      label: eventLabel(
+        ev as { EventName?: string; KillerName?: string; VictimName?: string; DragonType?: string },
+        nameMap,
+      ),
       kind: eventKind(ev.EventName),
     }))
 
