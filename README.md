@@ -1,4 +1,4 @@
-# AETHER — LoL Companion Desktop
+# AETHER LoL Companion Desktop
 
 Application **PC Windows** (Electron) pour League of Legends :
 
@@ -10,7 +10,7 @@ Application **PC Windows** (Electron) pour League of Legends :
 - mode **TFT** (lobby / match + compos indicatives)
 - auto-update via **GitHub Releases** (installeur Setup)
 
-> Lecture seule · fair-play · non affilié à Riot Games
+> Lecture seule · non affilié à Riot Games
 
 ## Lancer en développement
 
@@ -33,7 +33,7 @@ Les fichiers sortent dans `release/` (installeur NSIS + version portable).
 
 L’auto-update lit les **releases GitHub**, pas les simples `git push`.
 
-### Option A — CI GitHub Actions (recommandé)
+### Option A - CI GitHub Actions (recommandé)
 
 1. Incrémente `version` dans `package.json` (ex. `1.0.1` → `1.0.2`)
 2. Commit + push sur `main`
@@ -48,7 +48,7 @@ Le workflow `.github/workflows/release-windows.yml` build Windows et publie la r
 
 Tu peux aussi lancer le workflow à la main : Actions → **Release Windows** → Run workflow.
 
-### Option B — depuis un PC Windows
+### Option B - depuis un PC Windows
 
 ```bash
 # token GitHub avec droit repo

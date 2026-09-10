@@ -71,9 +71,9 @@ function positionLabel(pos?: string): string {
     bot: 'ADC',
     utility: 'Support',
     support: 'Support',
-    '': '—',
+    '': '-',
   }
-  if (!pos) return '—'
+  if (!pos) return '-'
   return map[pos.toLowerCase()] ?? pos
 }
 

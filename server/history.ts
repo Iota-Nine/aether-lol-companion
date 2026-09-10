@@ -113,7 +113,7 @@ function roleLabel(lane?: string, role?: string, position?: string): string {
   if (raw.includes('MID') || raw.includes('MIDDLE')) return 'MID'
   if (raw.includes('SUPPORT') || raw.includes('UTILITY')) return 'SUP'
   if (raw.includes('ADC') || raw.includes('BOTTOM') || raw.includes('BOT')) return 'ADC'
-  return '—'
+  return '-'
 }
 
 /** Participant normalisé (ancien LCU stats{} OU format plat type Match-v5) */
@@ -467,7 +467,7 @@ function gradePlayer(p: {
     return {
       grade: 'FEED',
       score,
-      verdict: `A feed dur (${p.kills}/${p.deaths}/${p.assists}) — gros trou d’XP/or pour l’équipe.`,
+      verdict: `Feed dur (${p.kills}/${p.deaths}/${p.assists}). Gros trou d'XP/or pour l'équipe.`,
     }
   }
   if (p.deaths >= 6 && kda < 1.3 && dmgRatio < 0.75) {
@@ -481,14 +481,14 @@ function gradePlayer(p: {
     return {
       grade: 'GHOST',
       score,
-      verdict: `Fantôme de la map — quasi aucun farm ni dégâts.`,
+      verdict: `Fantôme de la map, quasi aucun farm ni dégâts.`,
     }
   }
   if (kda >= 3 && (goldRatio >= 1.15 || dmgRatio >= 1.2)) {
     return {
       grade: 'CARRY',
       score,
-      verdict: `Carry clair (KDA ${kda.toFixed(1)}) — a porté les fights / l’économie.`,
+      verdict: `Carry clair (KDA ${kda.toFixed(1)}). A porté les fights / l'économie.`,
     }
   }
   if (score >= 55) {
@@ -501,7 +501,7 @@ function gradePlayer(p: {
   return {
     grade: 'MEH',
     score,
-    verdict: `Moyen — ni carry ni int, impact limité.`,
+    verdict: `Moyen, ni carry ni int, impact limité.`,
   }
 }
 
@@ -510,17 +510,30 @@ export async function buildMatchDebrief(
   gameId: number,
   youPuuid?: string | null,
 ): Promise<MatchDebrief | null> {
-  let game = await lcuGet<RawGame>(lockfile, `/lol-match-history/v1/games/${gameId}`)
-
   const mePuuid =
     youPuuid ||
     (await lcuGet<{ puuid?: string }>(lockfile, '/lol-summoner/v1/current-summoner'))?.puuid ||
     null
   if (!mePuuid) return null
 
+  // Detail game : timeout plus long + plusieurs chemins LCU
+  let game: RawGame | null = null
+  const detailPaths = [
+    `/lol-match-history/v1/games/${gameId}`,
+    `/lol-match-history/v1/games/${gameId}/`,
+  ]
+  for (const path of detailPaths) {
+    game = await lcuGet<RawGame>(lockfile, path, 8000)
+    if (game?.participants?.length) break
+    game = null
+  }
+
   if (!game?.participants?.length) {
-    const list = await fetchRawMatchList(lockfile, mePuuid, 20)
-    game = list.find((g) => asNum(g.gameId) === gameId) || null
+    const list = await fetchRawMatchList(lockfile, mePuuid, 30)
+    game =
+      list.find((g) => asNum(g.gameId) === gameId) ||
+      list.find((g) => String(g.gameId) === String(gameId)) ||
+      null
   }
 
   if (!game?.participants?.length) return null
@@ -604,12 +617,12 @@ export async function buildMatchDebrief(
 
   const why: string[] = []
   if (youWon) {
-    why.push('Victoire — votre équipe a mieux converti fights / objectifs.')
-    if (mvp) why.push(`MVP allié : ${mvp.gameName} (${mvp.championName}) — ${mvp.verdict}`)
+    why.push('Victoire: votre équipe a mieux converti fights / objectifs.')
+    if (mvp) why.push(`MVP allié : ${mvp.gameName} (${mvp.championName}): ${mvp.verdict}`)
   } else {
-    why.push('Défaite — trop peu d’avantage économique ou trop de morts inutiles.')
+    why.push('Défaite: trop peu d’avantage économique ou trop de morts inutiles.')
     if (intFeed && (intFeed.grade === 'FEED' || intFeed.grade === 'INT' || intFeed.score < 40)) {
-      why.push(`Point faible : ${intFeed.gameName} (${intFeed.championName}) — ${intFeed.verdict}`)
+      why.push(`Point faible : ${intFeed.gameName} (${intFeed.championName}): ${intFeed.verdict}`)
     }
     const enemyCarry = players.find((p) => p.team === 'enemy' && p.grade === 'CARRY')
     if (enemyCarry) {
@@ -621,8 +634,8 @@ export async function buildMatchDebrief(
   if (youCard) why.push(`Toi (${youCard.championName}) : ${youCard.verdict}`)
 
   const headline = youWon
-    ? `WIN — ${mvp ? `${mvp.championName} a carry` : 'équipe propre'}`
-    : `LOSS — ${intFeed && intFeed.score < 45 ? `${intFeed.championName} a plombé la game` : 'manque d’impact collectif'}`
+    ? `WIN: ${mvp ? `${mvp.championName} a carry` : 'équipe propre'}`
+    : `LOSS: ${intFeed && intFeed.score < 45 ? `${intFeed.championName} a plombé la game` : 'manque d’impact collectif'}`
 
   return {
     gameId,
