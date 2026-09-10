@@ -9,6 +9,9 @@ import type { LockfileData } from './types.js'
 const LEAGUE_LOCKFILE_CANDIDATES = [
   'C:\\Riot Games\\League of Legends\\lockfile',
   'D:\\Riot Games\\League of Legends\\lockfile',
+  'E:\\Riot Games\\League of Legends\\lockfile',
+  'F:\\Riot Games\\League of Legends\\lockfile',
+  path.join(process.env['PROGRAMFILES'] ?? 'C:\\Program Files', 'Riot Games', 'League of Legends', 'lockfile'),
   path.join(process.env['LOCALAPPDATA'] ?? '', 'Riot Games', 'League of Legends', 'lockfile'),
   path.join(os.homedir(), 'Library', 'Application Support', 'League of Legends', 'lockfile'),
   path.join(os.homedir(), '.local', 'share', 'League of Legends', 'lockfile'),
@@ -20,7 +23,7 @@ function parseLockfile(filePath: string): LockfileData | null {
     const raw = fs.readFileSync(filePath, 'utf8').trim()
     const [name, pid, port, password, protocol] = raw.split(':')
     if (!name || !pid || !port || !password || !protocol) return null
-    // Ignore Riot Client remoting lockfile — on veut LeagueClient
+    // Ignore Riot Client remoting lockfile - on veut LeagueClient
     if (name.toLowerCase().includes('riot')) return null
     return {
       name,
@@ -54,7 +57,25 @@ function findFromLeagueProcess(): LockfileData | null {
       protocol: 'https',
     }
   } catch {
-    return null
+    // Fallback wmic (anciens Windows)
+    try {
+      const out = execSync(
+        'wmic process where "name=\'LeagueClientUx.exe\'" get CommandLine /value',
+        { encoding: 'utf8', timeout: 4000, windowsHide: true },
+      )
+      const port = out.match(/--app-port=(\d+)/i)?.[1]
+      const password = out.match(/--remoting-auth-token=([^\s"]+)/i)?.[1]
+      if (!port || !password) return null
+      return {
+        name: 'LeagueClientUx',
+        pid: 0,
+        port: Number(port),
+        password: password.replace(/"/g, ''),
+        protocol: 'https',
+      }
+    } catch {
+      return null
+    }
   }
 }
 
@@ -71,7 +92,11 @@ export function findLockfile(): LockfileData | null {
   return null
 }
 
-export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T | null> {
+export function lcuGet<T>(
+  lockfile: LockfileData,
+  endpoint: string,
+  timeoutMs = 2500,
+): Promise<T | null> {
   const auth = Buffer.from(`riot:${lockfile.password}`).toString('base64')
 
   return new Promise((resolve) => {
@@ -115,7 +140,7 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
     )
 
     req.on('error', () => resolve(null))
-    req.setTimeout(2500, () => {
+    req.setTimeout(timeoutMs, () => {
       req.destroy()
       resolve(null)
     })
@@ -123,7 +148,7 @@ export function lcuGet<T>(lockfile: LockfileData, endpoint: string): Promise<T |
   })
 }
 
-/** Live Client Data API (en partie uniquement) — port 2999 */
+/** Live Client Data API (en partie uniquement) - port 2999 */
 export function liveClientGet<T>(endpoint: string): Promise<T | null> {
   const tryOnce = (protocol: 'https' | 'http') =>
     new Promise<T | null>((resolve) => {

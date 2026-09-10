@@ -4,8 +4,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { findLockfile, lcuGet, liveClientGet } from './lcu.js'
 import { loadChampions, getAllChampions, getChampionById } from './champions.js'
-import { buildLiveSession, type LcuChampSelectSession, type LcuSummoner } from './session.js'
-import { createDemoChampSelect } from './demo.js'
+import { buildLiveSession, type LcuChampSelectSession } from './session.js'
 import { normalizeRegion, isTftQueue, queueLabel } from './profiles.js'
 import {
   buildTftLobbySession,
@@ -16,12 +15,14 @@ import {
   type LiveClientPlayer,
   type GameflowSession,
 } from './tft.js'
-import { buildMetaGuides, buildLaneMetaGuides } from './meta.js'
+import { buildMetaGuides, buildLaneMetaGuides, prefetchAllLaneMetas } from './meta.js'
 import type { LiveSession } from './types.js'
 import { enrichPlayersWithStats, computeTeamWinChance } from './playerStats.js'
 import type { LockfileData } from './types.js'
 import { buildLolInGameSession, buildLolFromGameflow } from './ingame.js'
 import { buildProfileHome, buildMatchDebrief, buildLatestDebrief } from './history.js'
+import { buildCoachAdvice } from './coach.js'
+import { resolveCurrentSummoner } from './summoner.js'
 
 async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Promise<LiveSession> {
   try {
@@ -89,10 +90,14 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
       const lol = await buildMetaGuides({ mode: 'lol', championIds: [] })
       live.guides = {
         mode: 'lol',
-        patchNote: 'Suggestions meta OP.GG (en attente de lobby LoL)',
+        patchNote: 'Suggestions meta (en attente de lobby LoL)',
         lolBuilds: lol.lolBuilds.slice(0, 7),
         tftComps: tft.tftComps,
       }
+    }
+
+    if (live.mode === 'lol') {
+      live.coach = await buildCoachAdvice(live)
     }
   } catch (e) {
     console.warn('[aether] guides/stats:', e)
@@ -102,18 +107,12 @@ async function withGuides(live: LiveSession, lockfile?: LockfileData | null): Pr
 
 export function createApp() {
   const app = express()
-  let forceDemo = process.env.FORCE_DEMO === '1'
 
   app.use(cors())
   app.use(express.json())
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, forceDemo })
-  })
-
-  app.post('/api/demo', (req, res) => {
-    forceDemo = Boolean(req.body?.enabled)
-    res.json({ forceDemo })
+    res.json({ ok: true })
   })
 
   app.get('/api/champions', async (_req, res) => {
@@ -217,25 +216,6 @@ export function createApp() {
     try {
       await loadChampions()
 
-      if (forceDemo || req.query.demo === '1') {
-        const session = createDemoChampSelect()
-        const live = await buildLiveSession({
-          connected: true,
-          demo: true,
-          phase: 'ChampSelect',
-          region: 'euw',
-          message: 'Mode démo — données fictives.',
-          session,
-          currentSummoner: {
-            gameName: 'NissaMain',
-            tagLine: 'EUW',
-            displayName: 'NissaMain#EUW',
-          },
-        })
-        res.json(await withGuides(live))
-        return
-      }
-
       const lockfile = findLockfile()
       if (!lockfile) {
         res.json(
@@ -246,7 +226,7 @@ export function createApp() {
               region: 'euw',
               mode: 'idle',
               message:
-                'Mode meta solo — League non requis. Choisis une lane pour le top 7 OP.GG.',
+                'Ouvre le client League (pas juste Riot Client). Dès que LoL tourne, AETHER se connecte tout seul.',
             }),
           ),
         )
@@ -266,10 +246,7 @@ export function createApp() {
       )
       const region = normalizeRegion(regionData?.webRegion || regionData?.region || 'euw')
 
-      const currentSummoner = await lcuGet<LcuSummoner>(
-        lockfile,
-        '/lol-summoner/v1/current-summoner',
-      )
+      const currentSummoner = await resolveCurrentSummoner(lockfile)
 
       const lobby = await lcuGet<LobbyPayload>(lockfile, '/lol-lobby/v2/lobby')
       const queueId = lobby?.gameConfig?.queueId ?? gameflow?.gameData?.queue?.id
@@ -281,7 +258,7 @@ export function createApp() {
         ? await liveClientGet<LiveClientPlayer[]>('/liveclientdata/playerlist')
         : null
 
-      // ── LoL EN PARTIE (Live Client 2999) — priorité Porofessor-like ──
+      // ── LoL EN PARTIE (Live Client 2999) ──
       if (inGame && !tft) {
         const flowPlayers = [
           ...(gameflow?.gameData?.teamOne ?? []),
@@ -308,7 +285,7 @@ export function createApp() {
             summonerName: `${gameName}#${tagLine}`,
             gameName,
             tagLine,
-            assignedPosition: '—',
+            assignedPosition: '-',
             championId: raw.championId ?? null,
             championName: null,
             championKey: null,
@@ -389,10 +366,9 @@ export function createApp() {
       if (champSelect?.myTeam?.length || champSelect?.theirTeam?.length) {
         const live = await buildLiveSession({
           connected: true,
-          demo: false,
           phase,
           region,
-          message: 'Champion select LoL détecté — alliés, ennemis et picks synchronisés.',
+          message: 'Champion select LoL détecté: alliés, ennemis et picks synchronisés.',
           session: champSelect,
           currentSummoner,
           lockfile,
@@ -446,8 +422,8 @@ export function createApp() {
             mode: lobby ? 'lol' : 'idle',
             queueName: queueLabel(queueId, gameMode),
             message: you
-              ? `Connecté (${you}). Meta OP.GG dispo — le draft s’affichera en champ select.`
-              : 'Client détecté. Meta OP.GG dispo sans partie — le live s’active au draft.',
+              ? `Connecté (${you}). Meta dispo, le draft s’affichera en champ select.`
+              : 'Client détecté. Meta dispo sans partie, le live s’active au draft.',
           }),
           lockfile,
         ),
@@ -485,6 +461,7 @@ export async function startServer(port = Number(process.env.PORT) || 8787) {
   try {
     await loadChampions()
     console.log(`[aether] Champions chargés`)
+    prefetchAllLaneMetas(7)
   } catch (e) {
     console.warn('[aether] Chargement champions différé:', e)
   }

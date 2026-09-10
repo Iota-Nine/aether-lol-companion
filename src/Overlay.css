@@ -19,7 +19,8 @@ html.overlay-mode #root {
 .overlay-shell.thru .overlay-score,
 .overlay-shell.thru .overlay-roster,
 .overlay-shell.thru .overlay-feed,
-.overlay-shell.thru .overlay-idle {
+.overlay-shell.thru .overlay-idle,
+.overlay-shell.thru .overlay-coach {
   pointer-events: none;
 }
 
@@ -92,6 +93,144 @@ html.overlay-mode #root {
 .overlay-actions button:hover {
   border-color: #2dd4bf;
   color: #fff;
+}
+
+.overlay-coach {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(45, 212, 191, 0.35);
+  background: linear-gradient(135deg, rgba(6, 18, 24, 0.92), rgba(10, 14, 22, 0.88));
+  backdrop-filter: blur(12px);
+  animation: ovCoachIn 0.35s ease;
+}
+
+.overlay-coach.urg-critical {
+  border-color: rgba(251, 113, 133, 0.55);
+  box-shadow: 0 0 16px rgba(251, 113, 133, 0.12);
+}
+
+.overlay-coach.urg-high {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.overlay-coach.urg-mid {
+  border-color: rgba(45, 212, 191, 0.4);
+}
+
+.ov-coach-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.ov-coach-kicker span {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  color: #99f6e4;
+}
+
+.ov-coach-kicker em {
+  font-style: normal;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.72rem;
+  color: #64748b;
+  letter-spacing: 0.1em;
+}
+
+.ov-coach-headline {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ov-coach-headline strong {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  color: #f8fafc;
+}
+
+.ov-coach-headline span {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: #cbd5e1;
+}
+
+.ov-coach-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+
+.ov-coach-list li {
+  font-size: 0.74rem;
+  line-height: 1.3;
+  color: #94a3b8;
+}
+
+.ov-coach-list b {
+  color: #e2e8f0;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.ov-coach-counter {
+  margin-top: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.ov-coach-counter img,
+.ov-coach-ph {
+  width: 28px;
+  height: 28px;
+  border-radius: 2px;
+  border: 1px solid rgba(251, 113, 133, 0.45);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.ov-coach-ph {
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  color: #94a3b8;
+  background: rgba(15, 23, 42, 0.8);
+}
+
+.ov-coach-counter div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ov-coach-counter strong {
+  font-size: 0.78rem;
+  color: #fecdd3;
+}
+
+.ov-coach-counter span {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  line-height: 1.3;
+}
+
+@keyframes ovCoachIn {
+  from {
+    opacity: 0.4;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .overlay-idle {
@@ -236,22 +375,34 @@ html.overlay-mode #root {
 .overlay-feed {
   margin-top: 8px;
   display: grid;
-  gap: 3px;
-  max-height: 110px;
-  overflow: hidden;
-  padding: 8px;
+  gap: 4px;
+  max-height: 220px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 10px;
   border: 1px solid rgba(148, 163, 184, 0.16);
   background: rgba(6, 10, 18, 0.7);
   backdrop-filter: blur(10px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
 .ov-ev {
   display: flex;
   gap: 8px;
   align-items: baseline;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
   padding-left: 6px;
   border-left: 2px solid rgba(148, 163, 184, 0.35);
+}
+
+.ov-ev span {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ov-ev.kind-kill {

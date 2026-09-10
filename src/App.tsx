@@ -28,7 +28,7 @@ function roleShort(role: string): string {
     ADC: 'ADC',
     Support: 'SUP',
     HOST: 'HOST',
-    '—': '—',
+    '-': '-',
   }
   if (role.startsWith('P')) return role
   return map[role] ?? role.slice(0, 3).toUpperCase()
@@ -102,13 +102,26 @@ function PlayerSlot({
 }) {
   const live = player.live
   const stats = player.playerStats
-  // Anneau = meta OP.GG du CHAMPION affiché (pas ton WR ranked compte)
-  const champMetaWr = player.championWinRate
+  // Anneau: WR COMPTE ranked (scout). Meta champ en hint, pas en faux 100%.
+  const champMetaWr =
+    player.championWinRate != null && player.championWinRate > 0 ? player.championWinRate : null
   const accountWr = tft
     ? stats?.top4Rate ?? stats?.formScore ?? stats?.rankedWR
-    : stats?.formScore ?? stats?.rankedWR ?? stats?.recentWR
-  const displayWr = champMetaWr ?? (live || inGame ? null : accountWr)
-  const wrLabel = champMetaWr != null ? 'OP.GG' : accountWr != null ? 'COMPTE' : 'WR'
+    : stats?.recentWR ?? stats?.formScore ?? stats?.rankedWR
+  // En draft: privilégie le WR compte. En live: meta champ si dispo, sinon rien.
+  const displayWr = inGame || live ? champMetaWr : accountWr ?? champMetaWr
+  const wrLabel =
+    !inGame && !live && accountWr != null
+      ? stats?.rankedWR != null
+        ? 'COMPTE'
+        : stats?.recentWR != null
+          ? 'RECENT'
+          : 'COMPTE'
+      : champMetaWr != null
+        ? 'META'
+        : accountWr != null
+          ? 'COMPTE'
+          : 'WR'
   const tone = wrTone(displayWr ?? null)
   const status = player.locked ? 'locked' : player.isPickIntent ? 'intent' : 'waiting'
 
@@ -161,8 +174,14 @@ function PlayerSlot({
         <div className="slot-line-top">
           <div className="slot-identity">
             <strong className="slot-name">
-              {player.gameName}
-              <span className="slot-tag">#{player.tagLine}</span>
+              {player.championName
+                ? player.championName
+                : (
+                  <>
+                    {player.gameName}
+                    <span className="slot-tag">#{player.tagLine}</span>
+                  </>
+                )}
             </strong>
             {isYou && <span className="you-chip">YOU</span>}
           </div>
@@ -171,14 +190,15 @@ function PlayerSlot({
 
         <div className="slot-line-mid">
           {player.championName ? (
-            <>
-              <span className="champ-label">{player.championName}</span>
-              {player.championTier && !live && (
-                <span className={`tier tier-${player.championTier.toLowerCase()}`}>
-                  TIER {player.championTier}
-                </span>
-              )}
-            </>
+            player.championTier && !live ? (
+              <span className={`tier tier-${player.championTier.toLowerCase()}`}>
+                TIER {player.championTier}
+              </span>
+            ) : live ? (
+              <span className="champ-label dim">LIVE</span>
+            ) : (
+              <span className="champ-label dim">LOCK</span>
+            )
           ) : (
             <span className="champ-label dim">
               {tft ? 'En lobby / file d’attente…' : 'En attente du pick…'}
@@ -206,7 +226,7 @@ function PlayerSlot({
             <div className="dmg-row">
               <div className="dmg-meta">
                 <span>PART COMBAT</span>
-                <strong>{soloLive ? '—' : `${live.damageShare}%`}</strong>
+                <strong>{soloLive ? '-' : `${live.damageShare}%`}</strong>
               </div>
               <div className="dmg-track">
                 <div
@@ -244,7 +264,7 @@ function PlayerSlot({
         )}
         {player.championName && champMetaWr != null && (
           <p className="champ-meta-hint">
-            Meta {player.championName} · {champMetaWr.toFixed(1)}% WR OP.GG (pas ton historique perso)
+            Meta {player.championName} · {champMetaWr.toFixed(1)}% WR (pas ton historique perso)
           </p>
         )}
       </div>
@@ -258,7 +278,7 @@ function PlayerSlot({
             } as CSSProperties
           }
         >
-          <strong>{displayWr != null ? displayWr.toFixed(1) : '—'}</strong>
+          <strong>{displayWr != null ? displayWr.toFixed(1) : '-'}</strong>
           <span>{wrLabel}</span>
         </div>
       </div>
@@ -318,11 +338,11 @@ function TeamPanel({
             <p>{soloLive && side === 'enemy' ? 'SOLO / PRACTICE' : 'Scan en cours…'}</p>
             <span>
               {tft
-                ? 'Aucun joueur TFT détecté — ouvre un lobby TFT'
+                ? 'Aucun joueur TFT détecté, ouvre un lobby TFT'
                 : soloLive && side === 'enemy'
-                  ? 'Aucun ennemi — outil d’entraînement ou custom solo'
+                  ? "Aucun ennemi: outil d'entraînement ou custom solo"
                   : inGame
-                    ? 'Live Client 2999 indisponible — la partie doit être chargée'
+                    ? 'Live Client 2999 indisponible, la partie doit être chargée'
                     : 'Aucun joueur détecté en champion select'}
             </span>
           </div>
@@ -386,7 +406,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
       <div className="ingame-top">
         <div className="ingame-stream">
           <i className="stream-dot" />
-          <span>DIRECT · 0.6s</span>
+          <span>LIVE 0.6s</span>
         </div>
         <div className="ingame-clock">
           <span>MATCH CLOCK</span>
@@ -421,7 +441,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
               <i style={{ width: `${combatPct}%` }} />
               <b style={{ left: `${combatPct}%` }} />
             </div>
-            <span>COMBAT · {combatPct.toFixed(0)}% ALLY</span>
+            <span>COMBAT {combatPct.toFixed(0)}% ALLY</span>
           </div>
         </div>
         <div className="score-side enemy">
@@ -435,6 +455,29 @@ function InGameBoard({ live }: { live: LiveSession }) {
         </div>
       </div>
 
+      {live.coach && live.coach.tips.length > 0 && (
+        <div className={`ingame-coach urg-${live.coach.urgency}`}>
+          <div className="ingame-coach-head">
+            <span>COACH AETHER</span>
+            <em>{live.coach.urgency.toUpperCase()}</em>
+          </div>
+          <p>
+            <strong>{live.coach.tips[0].title}</strong>
+            {live.coach.tips[0].body}
+          </p>
+          {live.coach.counters[0] && (
+            <small>
+              VS {live.coach.counters[0].enemyChampionName}
+              {live.coach.counters[0].suggestions.length
+                ? ` · counters ${live.coach.counters[0].suggestions.map((s) => s.championName).join(', ')}`
+                : live.coach.counters[0].playTips[0]
+                  ? ` · ${live.coach.counters[0].playTips[0]}`
+                  : ''}
+            </small>
+          )}
+        </div>
+      )}
+
       {roster.length > 0 && (
         <div className="ingame-roster">
           <div className="roster-side ally">
@@ -442,7 +485,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
               <div key={`ra-${p.cellId}`} className={`roster-chip ${p.live?.isDead ? 'dead' : ''}`}>
                 {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                 <em key={`${p.live?.kills}-${p.live?.deaths}-${p.live?.assists}`} className="tick-num">
-                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '—'}
+                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '-'}
                 </em>
               </div>
             ))}
@@ -452,7 +495,7 @@ function InGameBoard({ live }: { live: LiveSession }) {
               <div key={`re-${p.cellId}`} className={`roster-chip ${p.live?.isDead ? 'dead' : ''}`}>
                 {p.championImage ? <img src={p.championImage} alt="" /> : <span>?</span>}
                 <em key={`${p.live?.kills}-${p.live?.deaths}-${p.live?.assists}`} className="tick-num">
-                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '—'}
+                  {p.live ? `${p.live.kills}/${p.live.deaths}/${p.live.assists}` : '-'}
                 </em>
               </div>
             ))}
@@ -501,7 +544,7 @@ function LanePicker({
   return (
     <nav
       className={`lane-dock ${sticky ? 'is-sticky' : ''}`}
-      aria-label="Sélecteur de lane meta OP.GG"
+      aria-label="Sélecteur de lane meta"
     >
       <div className="lane-dock-copy">
         <span className="lane-dock-key">LANE META</span>
@@ -539,16 +582,21 @@ function LolBuildsPanel({
   secondary?: boolean
 }) {
   const [meta, setMeta] = useState<MetaGuides | null>(null)
+  const [cache, setCache] = useState<Partial<Record<LaneId, MetaGuides>>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
+    // Garde l'ancien contenu visible pendant le fetch (pas de flash vide)
     setLoading(true)
     setError(null)
     void fetchLaneMeta(lane, 7)
       .then((data) => {
-        if (!cancelled) setMeta(data)
+        if (!cancelled) {
+          setMeta(data)
+          setCache((prev) => ({ ...prev, [lane]: data }))
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Erreur meta')
@@ -561,19 +609,25 @@ function LolBuildsPanel({
     }
   }, [lane])
 
-  const builds = meta?.lolBuilds?.length ? meta.lolBuilds : fallbackBuilds ?? []
+  const builds =
+    meta?.lolBuilds?.length
+      ? meta.lolBuilds
+      : cache[lane]?.lolBuilds?.length
+        ? cache[lane]!.lolBuilds
+        : fallbackBuilds ?? []
+  const patchNote = meta?.patchNote || cache[lane]?.patchNote
 
   return (
     <section
       className={`guides-panel lol-guides ${scout && !secondary ? 'scout-main' : ''} ${secondary ? 'meta-secondary' : ''}`}
-      id="meta-opgg"
+      id="meta-lane"
     >
       <header className="guides-head">
         <div>
           <p className="panel-kicker">
-            {secondary ? 'META OP.GG · SECONDAIRE' : scout ? 'META SCOUT · SANS LEAGUE' : 'META OP.GG'}
+            {secondary ? 'META RANKED' : scout ? 'META SANS LEAGUE' : 'META RANKED'}
           </p>
-          <h2>TOP 7 · {lane.toUpperCase()}</h2>
+          <h2>TOP 7 {lane.toUpperCase()}</h2>
         </div>
         <span className="guides-count">{loading ? '…' : `${builds.length} champs`}</span>
       </header>
@@ -593,9 +647,9 @@ function LolBuildsPanel({
         ))}
       </div>
 
-      {meta?.patchNote && <p className="lane-meta-note">{meta.patchNote}</p>}
+      {patchNote && <p className="lane-meta-note">{patchNote}</p>}
       {error && <p className="lane-meta-error">{error}</p>}
-      {loading && !builds.length && <p className="lane-meta-note">Chargement meta OP.GG…</p>}
+      {loading && !builds.length && <p className="lane-meta-note">Chargement meta…</p>}
 
       <div className={`guides-list ${loading ? 'is-loading' : ''}`}>
         {builds.map((b, i) => (
@@ -612,7 +666,7 @@ function LolBuildsPanel({
             </div>
             <div className={`guide-wr tone-${wrTone(b.winRate)}`}>
               <strong>{b.winRate.toFixed(1)}%</strong>
-              <span>OP.GG · {b.pickRate}% PR</span>
+              <span>{b.pickRate}% PR</span>
             </div>
             <div className="guide-build">
               <span className="keystone">{b.keystone}</span>
@@ -622,7 +676,7 @@ function LolBuildsPanel({
                     {item}
                   </span>
                 ))}
-                {b.boots !== '—' && <span className="item-chip boots">{b.boots}</span>}
+                {b.boots !== '-' && <span className="item-chip boots">{b.boots}</span>}
               </div>
               <p>{b.tips}</p>
             </div>
@@ -666,7 +720,7 @@ function TftCompsPanel({ comps }: { comps: TftCompGuide[] }) {
             <div className="comp-meta">
               <span>{c.playStyle}</span>
               <span>{c.difficulty}</span>
-              <span>Carry · {c.carry}</span>
+              <span>Carry: {c.carry}</span>
             </div>
             <div className="comp-traits">
               {c.traits.map((t) => (
@@ -700,7 +754,6 @@ export default function App() {
   const [syncFlash, setSyncFlash] = useState(false)
   const [update, setUpdate] = useState<UpdateState | null>(null)
   const [metaLane, setMetaLane] = useState<LaneId>('mid')
-  const [creditGateOpen, setCreditGateOpen] = useState(true)
   const [overlay, setOverlay] = useState<OverlayState>({ open: false, clickThrough: false })
   const [pendingDebrief, setPendingDebrief] = useState(false)
   const wasInGameRef = useRef(false)
@@ -781,7 +834,7 @@ export default function App() {
     (phase === 'ChampSelect' ||
       Boolean(live?.timer) ||
       (live?.allies?.some((p) => p.championId || p.isPickIntent) ?? false))
-  // Mode scout : meta OP.GG sans League / hors draft / hors partie
+  // Mode scout : meta sans League / hors draft / hors partie
   const isScoutMode = showLolLanes && !isInGame && !inChampSelect
   const showDraftHud = showLolLanes && (isInGame || inChampSelect)
   const isSoloLive = isInGame && (live?.enemies?.length ?? 0) === 0
@@ -832,27 +885,6 @@ export default function App() {
     <div
       className={`hud ${isDesktop ? 'desktop' : ''} ${isTft ? 'mode-tft' : 'mode-lol'} ${isInGame ? 'mode-ingame' : ''} ${syncFlash ? 'syncing' : ''}`}
     >
-      {creditGateOpen && (
-        <div className="credit-gate" role="dialog" aria-modal="true" aria-labelledby="credit-gate-title">
-          <div className="credit-gate-card">
-            <span className="credit-gate-mark">Æ</span>
-            <p className="credit-gate-kicker">AETHER</p>
-            <h2 id="credit-gate-title">Made by Anissa</h2>
-            <p className="credit-gate-sub">Companion LoL · lecture seule · fair-play</p>
-            <p className="credit-gate-feedback">
-              Feedback / idées ?{' '}
-              <a href="mailto:anissaanno94@gmail.com?subject=Feedback%20AETHER">anissaanno94@gmail.com</a>
-            </p>
-            <p className="credit-gate-discord">
-              Discord · <strong>sutabakusu</strong>
-            </p>
-            <button type="button" className="credit-gate-ok" autoFocus onClick={() => setCreditGateOpen(false)}>
-              OK
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="hud-bg" aria-hidden>
         <div className="bg-aurora" />
         <div className="bg-grid" />
@@ -870,13 +902,13 @@ export default function App() {
             <strong>AETHER</strong>
             <span className="titlebar-sub">
               {isInGame
-                ? 'LIVE MATCH NEURAL LINK'
+                ? 'MATCH LIVE'
                 : isTft
                   ? 'TFT Companion Desktop'
                   : isScoutMode
                     ? live?.connected
-                      ? 'Profil · historique · debrief'
-                      : 'Meta OP.GG · sans League'
+                      ? 'Profil, historique, debrief'
+                      : 'Meta sans League'
                     : 'LoL Companion Desktop'}
             </span>
           </div>
@@ -934,12 +966,12 @@ export default function App() {
           <div className="brand-copy">
             <p className="brand-eyebrow">
               {isInGame
-                ? 'NEURAL OVERLAY · REALTIME'
+                ? 'en partie'
                 : showHome
-                  ? 'HOME · PROFIL + HISTORIQUE'
+                  ? 'PROFIL + HISTORIQUE'
                   : isScoutMode
-                    ? 'META SCOUT · SANS CLIENT'
-                    : 'COMPANION SYSTEM'}
+                    ? 'META SANS CLIENT'
+                    : 'Companion'}
             </p>
             <h1>AETHER</h1>
           </div>
@@ -959,11 +991,11 @@ export default function App() {
           )}
           <div className="meta-chip">
             <span>PHASE</span>
-            <strong>{live?.phase ?? '—'}</strong>
+            <strong>{live?.phase ?? '-'}</strong>
           </div>
           <div className="meta-chip">
             <span>QUEUE</span>
-            <strong>{live?.queueName ?? '—'}</strong>
+            <strong>{live?.queueName ?? '-'}</strong>
           </div>
           <div className="meta-chip">
             <span>REGION</span>
@@ -998,7 +1030,7 @@ export default function App() {
           )}
           <div className={`live-badge ${isInGame ? 'hot' : ''} ${isScoutMode ? 'scout' : ''} ${showHome ? 'home' : ''}`}>
             <i className="live-dot" />
-            {isInGame ? 'STREAM 0.6s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META ONLY' : 'CLIENT LIVE'}
+            {isInGame ? 'LIVE 0.6s' : showHome ? 'PROFIL + HISTO' : isScoutMode ? 'META' : 'CLIENT'}
             <em>#{tick}</em>
           </div>
           <button type="button" className="icon-btn" onClick={() => void refresh()} title="Rafraîchir">
@@ -1008,39 +1040,41 @@ export default function App() {
         </div>
       </header>
 
-      {/* Barre lanes — masquée en live pour laisser place au scoreboard */}
+      {/* Barre lanes - masquée en live pour laisser place au scoreboard */}
       {showLolLanes && !isInGame && <LanePicker lane={metaLane} onChange={setMetaLane} sticky />}
 
       <section className="status-strip">
         <div className="status-message">
           <span className="status-key">
             {isInGame
-              ? 'LIVE FEED'
+              ? 'LIVE'
               : isEndOfGame
                 ? 'DEBRIEF'
                 : showHome
                   ? 'HOME'
                   : isScoutMode
-                    ? 'META SCOUT'
+                    ? 'META'
                     : 'STATUS'}
           </span>
           <p>
             {live?.message ??
-              'Mode meta solo — choisis une lane (TOP / JGL / MID / ADC / SUP). League n’est pas requis.'}
+              (live?.connected
+                ? 'Connecté au client League.'
+                : 'Ouvre League of Legends. AETHER se branche tout seul, sans mode démo.')}
           </p>
         </div>
         <div className="status-feed">
           <span>{showOfflineScout ? 'SANS CLIENT OK' : 'LCU READ-ONLY'}</span>
           <span>
             {isInGame
-              ? 'LIVE CLIENT · KDA / CS / OR / EVENTS'
+              ? 'LIVE: KDA, CS, OR, EVENTS'
               : showHome
-                ? 'PROFIL · HISTORIQUE · DEBRIEF'
+                ? 'PROFIL, HISTORIQUE, DEBRIEF'
                 : isScoutMode
-                  ? 'TOP 7 OP.GG PAR LANE'
-                  : 'DATA LCU · RANKED + HISTORIQUE'}
+                  ? 'TOP 7 META PAR LANE'
+                  : 'LCU: ranked + historique'}
           </span>
-          <span>FAIR-PLAY MODE</span>
+          <span>lecture seule</span>
         </div>
       </section>
 
@@ -1057,7 +1091,7 @@ export default function App() {
         <>
           <section className="vs-hud tft-form-hud">
             <div className="vs-side ally">
-              <span>LOBBY FORM</span>
+              <span>LOBBY</span>
               <strong className={`tone-${wrTone(live.teamWinChance.ally)}`}>
                 {live.teamWinChance.ally.toFixed(1)}%
               </strong>
@@ -1069,7 +1103,7 @@ export default function App() {
                   <span>WR</span>
                 </div>
               </div>
-              <p className="vs-caption">WIN% ESTIMÉ · RANKED TFT + TOP4 RÉCENT (DATA LCU)</p>
+              <p className="vs-caption">Win% estimé (ranked TFT + top4 récent)</p>
             </div>
             <div className="vs-side enemy">
               <span>BASELINE</span>
@@ -1119,11 +1153,11 @@ export default function App() {
               <p className="vs-caption">
                 {isSoloLive
                   ? isPractice
-                    ? 'OUTIL D’ENTRAÎNEMENT · PAS D’ÉQUIPE ENNEMIE'
-                    : 'SOLO / CUSTOM · PAS D’ÉQUIPE ENNEMIE'
+                    ? "Outil d'entraînement, pas d'équipe ennemie"
+                    : "Solo/custom, pas d'équipe ennemie"
                   : isInGame
-                    ? 'WIN% LIVE · RANKED COMPTE + COMBAT EN PARTIE'
-                    : 'TEAM WIN% · RANKED COMPTE + HISTORIQUE RÉCENT'}
+                    ? 'Win% live: ranked compte + combat'
+                    : 'Win% équipe: ranked + historique récent'}
               </p>
             </div>
 
@@ -1177,7 +1211,7 @@ export default function App() {
         </>
       )}
 
-      {/* Meta OP.GG hors in-game (secondaire si profil) */}
+      {/* Meta hors in-game (secondaire si profil) */}
       {showLolLanes && !isInGame && (
         <LolBuildsPanel
           lane={metaLane}
@@ -1193,8 +1227,8 @@ export default function App() {
       )}
 
       <footer className="hud-footer">
-        <span>AETHER HUD v1.8 · HISTO + DEBRIEF AUTO</span>
-        <span>Fenêtre sans bordure LoL · overlay topmost</span>
+        <span>AETHER · profil, historique, debrief</span>
+        <span>Overlay: mode fenêtre sans bordure LoL</span>
         <span>Non affilié à Riot Games</span>
       </footer>
     </div>

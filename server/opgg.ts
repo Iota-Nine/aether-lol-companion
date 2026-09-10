@@ -1,4 +1,4 @@
-/** Client OP.GG — meta champions + builds (API publique + MCP officiel OP.GG). */
+/** Client meta champions + builds (sources ranked publiques). */
 
 export type OpggLane = 'top' | 'jungle' | 'mid' | 'adc' | 'support'
 
@@ -30,7 +30,7 @@ export interface OpggBuild {
   skillOrder: string[]
   tip: string
   patch: string
-  source: 'op.gg'
+  source: 'meta'
 }
 
 const CACHE_MS = 1000 * 60 * 45
@@ -96,7 +96,7 @@ function pct(v: number | null | undefined): number {
 }
 
 function tierLabel(tier: number | null | undefined): string {
-  if (!tier) return '—'
+  if (!tier) return '-'
   return TIER_LABEL[tier] ?? String(tier)
 }
 
@@ -162,7 +162,7 @@ export async function fetchOpggRankedMeta(region = 'euw'): Promise<{
     ['adc', []],
     ['support', []],
   ])
-  const patch = payload?.meta?.version || '—'
+  const patch = payload?.meta?.version || '-'
 
   for (const row of payload?.data ?? []) {
     const id = row.id
@@ -213,7 +213,7 @@ export async function fetchOpggRankedMeta(region = 'euw'): Promise<{
   return { patch, byId, byLane }
 }
 
-/** Top N meta OP.GG pour une lane (tri tier rank). */
+/** Top N meta pour une lane (tri tier rank). */
 export async function fetchOpggLaneTop(
   lane: OpggLane,
   limit = 7,
@@ -252,7 +252,7 @@ async function mcpRpc(body: Record<string, unknown>): Promise<unknown> {
   if (!last) {
     // notifications can return empty / non-json
     if (String(body.method || '').startsWith('notifications/')) return null
-    throw new Error('Réponse MCP OP.GG invalide')
+    throw new Error('Réponse meta invalide')
   }
   return JSON.parse(last)
 }
@@ -305,13 +305,13 @@ function parseOpggAnalysisText(text: string): {
   const bootsList = coreBlocks[1] ? parseQuotedList(coreBlocks[1]) : []
   const bootsMatch = text.match(/Boots\(\[([^\]]*)\]/)
   const boots = bootsMatch
-    ? parseQuotedList(bootsMatch[1] || '')[0] || '—'
-    : bootsList[0] || '—'
+    ? parseQuotedList(bootsMatch[1] || '')[0] || '-'
+    : bootsList[0] || '-'
 
   const runes = text.match(/Runes\("([^"]+)",\[([^\]]*)\]/)
   const runeNames = runes ? parseQuotedList(`[${runes[2]}]`) : []
-  const keystone = runeNames[0] || '—'
-  const runePage = runes?.[1] || '—'
+  const keystone = runeNames[0] || '-'
+  const runePage = runes?.[1] || '-'
 
   const spellsMatch = text.match(/SummonerSpells\(\[([^\]]*)\]/)
   // spells may be ids; names preferred if present as strings
@@ -334,6 +334,18 @@ function parseOpggAnalysisText(text: string): {
     : []
 
   return { winRate, pickRate, banRate, tier, coreItems, boots, keystone, runePage, spells, skillOrder }
+}
+
+export function getCachedOpggBuild(
+  championKey: string,
+  position?: string | null,
+): OpggBuild | null {
+  const lane = normalizeLane(position)
+  const champ = toOpggChampionName(championKey)
+  const cacheKey = `${champ}:${lane}`
+  const hit = buildCache.get(cacheKey)
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.build
+  return null
 }
 
 export async function fetchOpggBuild(params: {
@@ -384,7 +396,7 @@ export async function fetchOpggBuild(params: {
 
     if (response.error) throw new Error(response.error.message || 'MCP error')
     const text = response.result?.content?.[0]?.text || ''
-    if (!text) throw new Error('Build OP.GG vide')
+    if (!text) throw new Error('Build meta vide')
 
     const parsed = parseOpggAnalysisText(text)
     const build: OpggBuild = {
@@ -394,21 +406,21 @@ export async function fetchOpggBuild(params: {
       winRate: parsed.winRate || ranked?.winRate || 0,
       pickRate: parsed.pickRate || ranked?.pickRate || 0,
       banRate: parsed.banRate || ranked?.banRate || 0,
-      tier: parsed.tier !== '—' ? parsed.tier : ranked?.tier || '—',
+      tier: parsed.tier !== '-' ? parsed.tier : ranked?.tier || '-',
       coreItems: parsed.coreItems.slice(0, 4),
       boots: parsed.boots,
       keystone: parsed.keystone,
       runePage: parsed.runePage,
       spells: parsed.spells.slice(0, 2),
       skillOrder: parsed.skillOrder.slice(0, 6),
-      tip: `Source OP.GG · patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
+      tip: `Source meta patch ${meta.patch} · ${lane.toUpperCase()} · Platinum+`,
       patch: meta.patch,
-      source: 'op.gg',
+      source: 'meta',
     }
     buildCache.set(cacheKey, { at: Date.now(), build })
     return build
   } catch (e) {
-    console.warn('[aether] OP.GG build:', champ, e)
+    console.warn('[aether] meta build:', champ, e)
     if (!ranked) return null
     const build: OpggBuild = {
       championId: params.championId,
@@ -419,14 +431,14 @@ export async function fetchOpggBuild(params: {
       banRate: ranked.banRate,
       tier: ranked.tier,
       coreItems: [],
-      boots: '—',
-      keystone: '—',
-      runePage: '—',
+      boots: '-',
+      keystone: '-',
+      runePage: '-',
       spells: [],
       skillOrder: [],
-      tip: `WR/PR OP.GG patch ${meta.patch} (build détaillé indisponible)`,
+      tip: `WR/PR patch ${meta.patch} (build détaillé indisponible)`,
       patch: meta.patch,
-      source: 'op.gg',
+      source: 'meta',
     }
     buildCache.set(cacheKey, { at: Date.now(), build })
     return build
